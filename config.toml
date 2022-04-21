@@ -1,4 +1,4 @@
-baseURL = https://mintommm.github.io/"
+baseURL = "https://mintommm.github.io/"
 title = "ExampleSite"
 paginate = 5
 theme = "PaperMod"
