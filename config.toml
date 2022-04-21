@@ -1,4 +1,4 @@
-baseURL = "https://examplesite.com/"
+baseURL = https://mintommm.github.io/"
 title = "ExampleSite"
 paginate = 5
 theme = "PaperMod"
@@ -19,7 +19,7 @@ description = "ExampleSite description"
 keywords = [ "Blog", "Portfolio", "PaperMod" ]
 author = "Me"
 images = [ "<link or path of image for opengraph, twitter-cards>" ]
-DateFormat = "January 2, 2006"
+DateFormat = "2006-01-02"
 defaultTheme = "auto"
 disableThemeToggle = false
 ShowReadingTime = true
@@ -70,15 +70,11 @@ Content = "Welcome to my blog"
 
 [[params.socialIcons]]
 name = "twitter"
-url = "https://twitter.com/"
-
-[[params.socialIcons]]
-name = "stackoverflow"
-url = "https://stackoverflow.com"
+url = "https://twitter.com/mintommm"
 
 [[params.socialIcons]]
 name = "github"
-url = "https://github.com/"
+url = "https://github.com/mintommm"
 
 [params.analytics.google]
 SiteVerificationTag = "XYZabc"
