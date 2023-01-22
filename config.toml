@@ -85,9 +85,9 @@ SiteVerificationTag = "XYZabc"
 SiteVerificationTag = "XYZabc"
 
 [params.cover]
-hidden = false
-hiddenInList = false
-hiddenInSingle = false
+hidden = true
+hiddenInList = true
+hiddenInSingle = true
 
 [params.fuseOpts]
 isCaseSensitive = false
