@@ -32,3 +32,5 @@ something
 aaaa
 
 share
+
+wrote
