@@ -1,6 +1,6 @@
 baseURL: "https://mintommm.github.io/"
 title: mintommm pages
-paginate: 1
+paginate: 5
 theme: PaperMod
 
 enableRobotsTXT: true
@@ -19,19 +19,19 @@ params:
   title: "mintommm pages"
   description: This is mintommms pages"
   keywords: [Blog, Portfolio, PaperMod]
-  author: Me
+  # author: Me
   # author: ["Me", "You"] # multiple authors
   images: ["<link or path of image for opengraph, twitter-cards>"]
   DateFormat: "2006-01-02"
   defaultTheme: auto # dark, light
   disableThemeToggle: false
 
-  ShowReadingTime: true
-  ShowShareButtons: true
+  ShowReadingTime: false
+  ShowShareButtons: false
   ShowPostNavLinks: true
   ShowBreadCrumbs: true
-  ShowCodeCopyButtons: false
-  ShowWordCount: true
+  ShowCodeCopyButtons: true
+  ShowWordCount: false
   ShowRssButtonInSectionTermList: true
   UseHugoToc: true
   disableSpecial1stPost: false
@@ -39,8 +39,8 @@ params:
   comments: false
   hidemeta: false
   hideSummary: false
-  showtoc: false
-  tocopen: false
+  showtoc: true
+  tocopen: true
 
   assets:
     # disableHLJS: true # to disable highlight.js
@@ -52,24 +52,24 @@ params:
     safari_pinned_tab: "<link / abs url>"
 
   label:
-    text: "Home"
+    text: "mintommm.github.io"
     icon: /apple-touch-icon.png
     iconHeight: 35
 
   # profile-mode
-  profileMode:
-    enabled: false # needs to be explicitly set
-    title: ExampleSite
-    subtitle: "This is subtitle"
-    imageUrl: "<img location>"
-    imageWidth: 120
-    imageHeight: 120
-    imageTitle: my image
-    buttons:
-      - name: Posts
-        url: posts
-      - name: Tags
-        url: tags
+  # profileMode:
+  #   enabled: false # needs to be explicitly set
+  #   title: ExampleSite
+  #   subtitle: "This is subtitle"
+  #   imageUrl: "<img location>"
+  #   imageWidth: 120
+  #   imageHeight: 120
+  #   imageTitle: my image
+  #   buttons:
+  #     - name: Posts
+  #       url: posts
+  #     - name: Tags
+  #       url: tags
 
   # home-info mode
   homeInfoParams:
@@ -78,29 +78,27 @@ params:
 
   socialIcons:
     - name: twitter
-      url: "https://twitter.com/"
-    - name: stackoverflow
-      url: "https://stackoverflow.com"
+    - url: "https://twitter.com/mintommm"
     - name: github
-      url: "https://github.com/"
+      url: "https://github.com/mintommm"
 
-  analytics:
-    google:
-      SiteVerificationTag: "XYZabc"
-    bing:
-      SiteVerificationTag: "XYZabc"
-    yandex:
-      SiteVerificationTag: "XYZabc"
+  # analytics:
+  #   google:
+  #     SiteVerificationTag: "XYZabc"
+  #   bing:
+  #     SiteVerificationTag: "XYZabc"
+  #   yandex:
+  #     SiteVerificationTag: "XYZabc"
 
   cover:
     hidden: true # hide everywhere but not in structured data
     hiddenInList: true # hide on list pages and home
     hiddenInSingle: true # hide on single page
 
-  editPost:
-    URL: "https://github.com/<path_to_repo>/content"
-    Text: "Suggest Changes" # edit text
-    appendFilePath: true # to append file path to Edit link
+  # editPost:
+  #   URL: "https://github.com/<path_to_repo>/content"
+  #   Text: "Suggest Changes" # edit text
+  #   appendFilePath: true # to append file path to Edit link
 
   # for search
   # https://fusejs.io/api/options.html
@@ -122,6 +120,10 @@ menu:
       name: tags
       url: /tags/
       weight: 20
+    - identifier: archives
+      name: archives
+      url: /archives/
+      weight: 30
     # - identifier: example
     #   name: example.org
     #   url: https://example.org
