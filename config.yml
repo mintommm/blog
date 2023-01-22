@@ -1,7 +1,7 @@
 baseURL: "https://mintommm.github.io/"
 title: mintommm pages
 paginate: 5
-theme: PaperModMod
+theme: PaperMod
 
 enableRobotsTXT: true
 buildDrafts: false
