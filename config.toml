@@ -1,5 +1,5 @@
 baseURL = "https://mintommm.github.io/"
-title = "ExampleSite"
+title = "mintommm pages"
 paginate = 5
 theme = "PaperModMod"
 enableRobotsTXT = true
@@ -14,18 +14,18 @@ minifyOutput = true
 
 [params]
 env = "production"
-title = "ExampleSite"
-description = "ExampleSite description"
+title = "mintommm pages"
+description = "This is "mintommm's pages""
 keywords = [ "Blog", "Portfolio", "PaperMod" ]
 images = [ "<link or path of image for opengraph, twitter-cards>" ]
 DateFormat = "2006-01-02"
 defaultTheme = "auto"
 disableThemeToggle = false
 ShowReadingTime = false
-ShowShareButtons = true
+ShowShareButtons = false
 ShowPostNavLinks = true
 ShowBreadCrumbs = true
-ShowCodeCopyButtons = false
+ShowCodeCopyButtons = true
 disableSpecial1stPost = false
 disableScrollToTop = false
 comments = false
@@ -111,7 +111,7 @@ url = "/tags/"
 weight = 20
 
 [[menu.main]]
-identifier = "example"
-name = "example.org"
-url = "https://example.org"
+identifier = "mintommm pages"
+name = "mintommm pages name"
+url = "https://mintommm.github.io/"
 weight = 30
