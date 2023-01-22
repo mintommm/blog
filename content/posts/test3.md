@@ -2,7 +2,7 @@
 # draft: true
 title: "xxx"
 date: 2023-01-22T12:30:55Z
-categories: [""]
+categories: ["test page"]
 tags: ["","",""]
 description: ""
 

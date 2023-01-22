@@ -1,6 +1,7 @@
 ---
 # draft: true
 title: "Test1"
+categories: ["test page"]
 tags: ["first"]
 cover:
     image: "<image path/url>" # image path/url
