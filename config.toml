@@ -110,8 +110,8 @@ name = "tags"
 url = "/tags/"
 weight = 20
 
-[[menu.main]]
-identifier = "mintommm pages"
-name = "mintommm pages name"
-url = "https://mintommm.github.io/"
-weight = 30
+# [[menu.main]]
+# identifier = "mintommm pages"
+# name = "mintommm pages name"
+# url = "https://mintommm.github.io/"
+# weight = 30
