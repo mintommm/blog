@@ -42,7 +42,7 @@ apple_touch_icon = "<link / abs url>"
 safari_pinned_tab = "<link / abs url>"
 
 [params.label]
-text = "Home"
+text = "Home!"
 icon = "/apple-touch-icon.png"
 iconHeight = 35
 
