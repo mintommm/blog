@@ -1,5 +1,5 @@
 ---
-# draft: true
+draft: true
 title: "xxx"
 date: 2023-01-22T12:30:55Z
 categories: ["test page"]
@@ -63,7 +63,6 @@ This is `inline`.
 > This is Blockquotes
 
 #### Links（参照）
-[yonehub blog](https://yonehub.y10e.com/)
 
 #### Images（画像）
 ![sample](/img/sample/sample.png)
