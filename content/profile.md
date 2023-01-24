@@ -4,9 +4,11 @@ title: "Profile"
 # categories: [""]
 # tags: ["","",""]
 description: ""
+lastmod: # ここはBlankにしておく
 
 ShowPostNavLinks: false
 ShowBreadCrumbs: false
+showtoc: false
 
 # cover:
 #     image: "<image path/url>" # image path/url
@@ -17,3 +19,10 @@ ShowBreadCrumbs: false
 ---
 
 *Work in progress*
+
+### 好きなもの
+- 寿司
+
+### 嫌いなもの
+- タバコ
+
