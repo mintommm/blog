@@ -100,3 +100,10 @@ menu:
       name: Archives
       url: /archives/
       weight: 30
+
+
+enableGitInfo: true
+frontmatter:
+  lastmod:
+    - lastmod
+    - :git
