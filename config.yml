@@ -101,10 +101,10 @@ menu:
       url: /archives/
       weight: 30
 
-    # - identifier: terms
-    #   name: Terms
-    #   url: /terms/
-    #   weight: 40
+    - identifier: terms
+      name: Terms
+      url: /terms/
+      weight: 40
 
 
 enableGitInfo: true
