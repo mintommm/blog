@@ -108,3 +108,9 @@ frontmatter:
     - lastmod
     - :fileModTime
     - :git
+
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
