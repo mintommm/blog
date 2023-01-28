@@ -1,5 +1,5 @@
 ---
-# draft: true
+draft: true
 title: "Test1"
 categories: ["test page"]
 tags: ["first"]
@@ -24,3 +24,15 @@ share
 
 wrote
 test
+
+<bold>bold</bold>
+
+- aaa
+- bbb
+- ccc
+
+
+<ul class="list">
+  <li>Fruit</li>
+  <li>Dairy</li>
+</ul>
