@@ -23,6 +23,8 @@ jobs:
           hugo-version: 'latest'
 
       - name: Build
+        env: 
+          TZ: "Asia/Tokyo" # タイムゾーンを指定
         run: hugo --minify
 
     #   - name: Deploy
