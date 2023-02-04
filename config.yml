@@ -1,5 +1,5 @@
-baseURL: "https://mintommm.github.io/"
-title: mintommm.github.io
+baseURL: "https://tryk.dev/"
+title: tryk.dev
 paginate: 3
 theme: PaperMod
 
@@ -16,15 +16,15 @@ minify:
 
 params:
   env: production # to enable google analytics, opengraph, twitter-cards and schema.
-  title: "mintommm.github.io"
-  description: "This is mintommm's pages"
+  title: "tryk.dev"
+  description: "This is Terry's pages"
   keywords: [Blog, Portfolio, PaperMod]
   images: ["<link or path of image for opengraph, twitter-cards>"]
   DateFormat: "2006-01-02"
   defaultTheme: auto # dark, light
-  analytics:
-    google:
-      SiteVerificationTag: "G-3KPT2YVDR4"
+  # analytics:
+  #   google:
+  #     SiteVerificationTag: "G-3KPT2YVDR4"
 
   ShowReadingTime: false
   ShowShareButtons: false
@@ -51,7 +51,7 @@ params:
     safari_pinned_tab: "<link / abs url>"
 
   label:
-    text: "mintommm.github.io"
+    text: "tryk.dev"
     icon: /apple-touch-icon.png
     iconHeight: 35
 
