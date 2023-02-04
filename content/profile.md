@@ -31,6 +31,7 @@ showtoc: false
 - Zenn : https://zenn.dev/mintommm
 - Linkedin : https://www.linkedin.com/in/terrykurumatani/
 - Nintendo Switch : SW-1259-5233-1813
+- stat.ink : https://stat.ink/@mintommm/spl3
 
 <!-- 
 ## Presentations at Work
