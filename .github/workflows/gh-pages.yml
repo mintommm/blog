@@ -38,4 +38,4 @@ jobs:
           deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
           external_repository: mintommm/mintommm.github.io
           publish_branch: main
-          cname: www.tryk.dev
+          cname: tryk.dev
