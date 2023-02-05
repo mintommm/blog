@@ -2,7 +2,7 @@ baseURL: "https://tryk.dev/"
 title: tryk.dev
 paginate: 3
 theme: PaperMod
-DefaultContentLanguage: "ja"
+defaultContentLanguage: ja
 
 enableRobotsTXT: true
 buildDrafts: false
