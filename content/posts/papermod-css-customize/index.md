@@ -1,9 +1,9 @@
 ---
 # draft: true
-title: "Hugo+PaperModのCSSをカスタマイズして見出しの先頭に#をつける"
-description: "h2やh3要素の先頭に「##」や「###」を入れたい"
-tags: ["blog","Hugo","PaperMod"]
-showtoc: false
+title: "Hugo+PaperModのCSSをカスタマイズする"
+description: ""
+tags: ["blog","Hugo","PaperMod", "CSS"]
+# showtoc: false
 # cover:
 #     image: "<image path/url>" # image path/url
 #     alt: "<alt text>" # alt text
@@ -12,14 +12,17 @@ showtoc: false
 #     hidden: true # only hide on current single page
 date: 2023-02-05T05:25:10Z
 ---
-## やったこと
+
+## CSSの変更方法
 
 * PaperModでは`themes/PaperMod/assets/css/`に基本的なCSSが配置されている
 * これらをファイル単位でオーバーライドすることによって実現する
 * `extended`フォルダを使う[^1]ようなFAQがあるが、今回は既存のスタイル指定を変更したいので、Hugoのルートに`assets/css`フォルダを作って、その中に既存のCSSファイルをコピーし、コピーで作られたCSSファイルを編集することで行った
-* 記事内の要素は`common/post-single.css`に記載されていたので以下を追記した
-* ついでにmarginも調整した
 
+
+## 見出しの先頭に#をつける
+
+* 記事内の要素は`common/post-single.css`に記載されていたので以下を追記した
 
 ```css
 .post-content h2:before {
@@ -30,6 +33,24 @@ date: 2023-02-05T05:25:10Z
     content: "### ";
 }
 ```
+
+
+## 見出しのmargin調整
+
+* 記事内の要素は`common/post-single.css`に記載されていたので以下のように書き換えた
+
+```css
+.post-content h2 {
+    margin: 96px auto 24px;
+    font-size: 32px;
+}
+
+.post-content h3 {
+    margin: 32px auto;
+    font-size: 24px;
+}
+```
+
 
 
 
