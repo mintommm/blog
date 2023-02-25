@@ -16,7 +16,7 @@ params:
   DateFormat: "2006-01-02"
   defaultTheme: auto # dark, light
   
-  gtm_id: "GTM-5ZBXHPH"
+  gtm_id: "GTM-5MJ49XP"
   gtm_datalayer: "basic"
   gtm_endpoint: "sgtm.tryk.dev"
   # analytics:
