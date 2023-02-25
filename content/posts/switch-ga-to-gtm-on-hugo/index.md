@@ -1,5 +1,5 @@
 ---
-draft: true
+# draft: true
 title: "HugoのGoogle AnalyticsタグをGoogle Tag Managerタグに置き換える"
 description: ""
 tags: ["blog","Hugo","Google Analytics", "Google Tag Manager"]
@@ -34,7 +34,7 @@ Hugoのテーマによって対応しているものがあるかもしれない�
 
 ### Partialの作成
 
-まずは `\layouts\partials` に `gtm.html` というファイルを用意して、中身を以下のようにする。 \
+まずは `/layouts/partials` に `gtm.html` というファイルを用意して、中身を以下のようにする。 \
 [記事で紹介されているサンプル](https://github.com/martijnvv/GTM-integration-Hugo)を少々変更した。
 
 
@@ -98,9 +98,9 @@ Hugoのテーマによって対応しているものがあるかもしれない�
 
 ### Partialの埋め込み
 
-次にこのPartialを `head.html` に埋め込む。
+次にこのPartialを `/layouts/partials/head.html` に埋め込む。
 
-&lt;head>タグ内の任意の場所に以下を追加すればOK。
+このPartialが&lt;head>タグの中身になるので任意の場所に以下を追加すればOK。
 
 
 ```html
@@ -112,7 +112,7 @@ Hugoのテーマによって対応しているものがあるかもしれない�
 
 最低限としてはこれだけでも構わないが、[GTMのiframeバージョン](https://developers.google.com/tag-manager/quickstart?hl=ja)（JavaScriptが無効な場合にもある程度の動作を期待するもの）も追加しておきたい。
 
-`\layouts\_default\baseof.html` の&lt;body>タグの先頭に近い場所に以下を追加すればOK。
+`/layouts/_default/baseof.html` の&lt;body>タグの先頭に近い場所に以下を追加すればOK。
 
 
 ```html

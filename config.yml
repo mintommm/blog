@@ -16,9 +16,9 @@ params:
   DateFormat: "2006-01-02"
   defaultTheme: auto # dark, light
   
-  # gtm_id: "GTM-xxxx"
-  # gtm_datalayer: "basic"
-  # gtm_endpoint: "sgtm.example.com"
+  gtm_id: "GTM-5ZBXHPH"
+  gtm_datalayer: "basic"
+  gtm_endpoint: "sgtm.tryk.dev"
   # analytics:
   #   google:
   #     SiteVerificationTag: "G-3KPT2YVDR4"
