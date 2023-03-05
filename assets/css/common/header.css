@@ -2,7 +2,7 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    max-width: calc(var(--nav-width) + var(--gap) * 2);
+    /* max-width: calc(var(--nav-width) + var(--gap) * 2); */
     margin-inline-start: auto;
     margin-inline-end: auto;
     line-height: var(--header-height);
@@ -32,8 +32,8 @@
 .logo a {
     font-family: 'Libre Barcode 128 Text', cursive;
     font-size: 2.5rem;
-    height: 3rem;
-    line-height: 3rem;
+    height: var(--header-height);
+    line-height: var(--header-height);
 }
 
 .logo a img, .logo a svg {
