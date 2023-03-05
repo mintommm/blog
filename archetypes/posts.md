@@ -1,5 +1,6 @@
 ---
 draft: true
+slug: ""
 title: "xxx"
 description: ""
 tags: ["","",""]
