@@ -1,0 +1,38 @@
+:root {
+    --gap: 24px;
+    --content-gap: 20px;
+    --nav-width: 1024px;
+    --main-width: 720px;
+    --header-height: 60px;
+    --footer-height: 60px;
+    --radius: 8px;
+    --theme:     rgb(253, 246, 227); /* base3 */
+    --entry:     rgb(238, 232, 213); /* base2 */
+    --primary:   rgb(  0,  43,  54); /* base03 */
+    --secondary: rgb(131, 148, 150); /* base0 */
+    --tertiary:  rgb(238, 232, 213); /* base2 */
+    --content:   rgb(  7,  54,  66); /* base02 */
+    --hljs-bg:   rgb(  0,  43,  54); /* base03 */
+    --code-bg:   rgb(238, 232, 213); /* base2 */
+    --border:    rgb(238, 232, 213); /* base2 */
+}
+
+.dark {
+    --theme:     rgb(  0,  43,  54); /* base03 */
+    --entry:     rgb(  7,  54,  66); /* base02 */
+    --primary:   rgb(147, 161, 161); /* base1 */
+    --secondary: rgb( 88, 110, 117); /* base01 */
+    --tertiary:  rgb(  7,  54,  66); /* base02 */
+    --content:   rgb(147, 161, 161); /* base1 */
+    --hljs-bg:   rgb(  0,  43,  54); /* base03 */
+    --code-bg:   rgb(  7,  54,  66); /* base02 */
+    --border:    rgb(  7,  54,  66); /* base02 */
+}
+
+.list {
+    background: var(--code-bg);
+}
+
+.dark.list {
+    background: var(--theme);
+}
