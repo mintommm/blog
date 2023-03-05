@@ -2,7 +2,7 @@ baseURL: "https://tryk.dev/"
 title: tryk.dev
 defaultContentLanguage: ja
 
-paginate: 3
+paginate: 10
 theme: PaperMod
 
 googleAnalytics: "G-3KPT2YVDR4"
