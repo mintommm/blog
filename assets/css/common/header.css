@@ -1,18 +1,22 @@
+.header {
+    width: 100%;
+}
+
 .nav {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
     /* max-width: calc(var(--nav-width) + var(--gap) * 2); */
+    text-align: center;
     margin-inline-start: auto;
     margin-inline-end: auto;
     line-height: var(--header-height);
     position: fixed;
     z-index: 10;
-    top: 0;
-    left: 0;
     width: 100%;
     min-height: var(--header-height);
     background-color: var(--theme);
+    /* 最大幅で左寄せになっているのがわからない */
 }
 
 .nav a {
