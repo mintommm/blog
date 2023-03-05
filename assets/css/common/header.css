@@ -6,6 +6,13 @@
     margin-inline-start: auto;
     margin-inline-end: auto;
     line-height: var(--header-height);
+    position: fixed;
+    z-index: 10;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--header-height);
+    background-color: var(--theme);
 }
 
 .nav a {
@@ -25,7 +32,8 @@
 .logo a {
     font-family: 'Libre Barcode 128 Text', cursive;
     font-size: 2.5rem;
-    height: 2.5rem;
+    height: 3rem;
+    line-height: 3rem;
 }
 
 .logo a img, .logo a svg {
