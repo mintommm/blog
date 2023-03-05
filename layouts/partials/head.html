@@ -41,8 +41,10 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Barcode+128+Text&family=Noto+Sans+JP&family=Roboto&display=swap" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Barcode+128+Text&display=optional&text={{ site.Params.label.text }}" media="print" onload="this.media='all'">
+<link rel="stylesheet" media="print" onload="this.media='all'" 
+      href="https://fonts.googleapis.com/css2?family=Libre+Barcode+128+Text&display=block&text={{ site.Params.label.text }}" >
+<link rel="stylesheet" media="print" onload="this.media='all'" 
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP&family=Roboto&display=swap">
 
 
 {{- /* includes */}}
