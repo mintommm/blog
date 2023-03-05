@@ -1,5 +1,6 @@
 ---
 # draft: true
+slug: "ghpages-use-customdomain"
 title: "Github Pagesでカスタムドメインを使う"
 description: "HugoをGithub Pagesでカスタムドメインを使うために必要な設定を追加した"
 tags: ["blog","Hugo","Github Pages"]

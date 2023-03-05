@@ -1,5 +1,6 @@
 ---
 # draft: true
+slug: "papermod-css-customize"
 title: "Hugo+PaperModのCSSをカスタマイズする"
 description: ""
 tags: ["blog","Hugo","PaperMod", "CSS"]
@@ -52,7 +53,29 @@ date: 2023-02-05T05:25:10Z
 ```
 
 
+## 配色の変更
 
+
+## 明暗切り替えボタンの移動
+
+
+## Web font導入
+Google Fontsでもsrc: local を使いたいから
+```css
+@font-face {
+    font-family: "Roboto";
+    src: local("Roboto");
+}
+
+@font-face {
+    font-family: "Noto Sans JP";
+    src:
+        local("Noto Sans CJK JP"),
+        local("Noto Sans JP");
+}
+```
+を後に読まれるCSS(reset.css)に書いた
+font読み込みは早い段階で書いた
 
 <!-- Footnotes themselves at the bottom. -->
 ## Notes
