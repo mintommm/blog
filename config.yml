@@ -5,7 +5,7 @@ defaultContentLanguage: ja
 paginate: 10
 theme: PaperMod
 
-googleAnalytics: "G-3KPT2YVDR4"
+# googleAnalytics: "G-3KPT2YVDR4"
 
 params:
   # env: production # to enable google analytics, opengraph, twitter-cards and schema.
