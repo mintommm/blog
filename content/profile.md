@@ -25,7 +25,7 @@ showtoc: false
 
 ## Accounts
 
-- Discord : mintommm#3090
+- Discord : mintommm
 - Twitter : https://twitter.com/mintommm
 - Github: https://github.com/mintommm
 - Zenn : https://zenn.dev/mintommm
