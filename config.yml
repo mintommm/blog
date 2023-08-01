@@ -1,6 +1,7 @@
 baseURL: "https://tryk.dev/"
 title: tryk.dev
 defaultContentLanguage: ja
+hasCJKLanguage: true
 
 paginate: 10
 theme: PaperMod
