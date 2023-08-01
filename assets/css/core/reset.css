@@ -40,7 +40,7 @@ body {
         "Noto Sans JP"
         sans-serif;
     font-size: 14px;
-    line-height: 1.6rem;
+    line-height: 1.6;
     word-break: break-word;
     background: var(--theme);
 }
@@ -65,7 +65,7 @@ h3,
 h4,
 h5,
 h6 {
-    line-height: 1.2;
+    line-height: 1.4;
 }
 
 h1,
