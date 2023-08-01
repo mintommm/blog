@@ -4,19 +4,20 @@
 }
 
 .post-title {
+    font-size: 2rem;
     margin-bottom: 2px;
-    font-size: 40px;
 }
 
 .post-description {
-    margin-top: 10px;
+    font-size: 0.8rem;
+    margin-top: 0.7rem;
     margin-bottom: 5px;
 }
 
 .post-meta,
 .breadcrumbs {
     color: var(--secondary);
-    font-size: 14px;
+    font-size: 0.8rem;
     display: flex;
     flex-wrap: wrap;
 }
@@ -28,54 +29,60 @@
     box-shadow: 0 1px 0 var(--secondary);
 }
 
-.breadcrumbs a {
-    font-size: 16px;
-}
+/* .breadcrumbs a {
+    font-size: 1rem;
+} */
 
 .post-content {
     color: var(--content);
 }
 
-.post-content h3,
+/* .post-content h3, */
 .post-content h4,
 .post-content h5,
 .post-content h6 {
-    margin: 24px 0 16px;
+    margin: 3rem auto 1rem;
 }
 
 .post-content h1 {
-    margin: 40px auto 32px;
-    font-size: 40px;
+    font-size: 2rem;
+    margin: 2.8rem auto 2.2rem;
 }
 
 .post-content h2 {
-    margin: 96px auto 24px;
-    font-size: 32px;
+    font-size: 1.4rem;
+    border-bottom: solid 1px;
+    margin: 4rem auto 2rem;
+	padding: 0.3rem 0;
 }
 
 .post-content h2:before {
-    content: "## ";
+    /* content: "## "; */
+    font-weight: lighter;
 }
 
 .post-content h3 {
-    margin: 32px auto;
-    font-size: 24px;
+    font-size: 1.1rem;
+	border-left: solid 2px;
+    margin: 3rem auto 1rem;
+	padding: 0.2rem 0.5rem;
 }
 
 .post-content h3:before {
-    content: "### ";
+    /* content: "### "; */
+    font-weight: lighter;
 }
 
 .post-content h4 {
-    font-size: 16px;
+    font-size: 1.1rem;
 }
 
 .post-content h5 {
-    font-size: 14px;
+    font-size: 1rem;
 }
 
 .post-content h6 {
-    font-size: 12px;
+    font-size: 0.9rem;
 }
 
 .post-content a,
@@ -201,7 +208,7 @@
 .post-content code {
     margin: auto 4px;
     padding: 4px 6px;
-    font-size: 0.78em;
+    font-size: 0.9rem;
     line-height: 1.5;
     background: var(--code-bg);
     border-radius: 2px;
@@ -218,10 +225,16 @@
     word-break: break-all;
 }
 
-.post-content blockquote {
-    margin: 20px 0;
-    padding: 0 14px;
-    border-inline-start: 3px solid var(--primary);
+.post-content blockquote{
+    position:relative;
+    border-left:1px solid;
+    padding:1rem 3rem;
+}
+.post-content blockquote:before{
+    position:absolute;
+    content:'“';
+    margin:0.5rem -2.5rem;
+    font-size:5rem;
 }
 
 .post-content hr {

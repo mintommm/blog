@@ -39,8 +39,8 @@ body {
         "Noto Sans",
         "Noto Sans JP"
         sans-serif;
-    font-size: 18px;
-    line-height: 1.6;
+    font-size: 14px;
+    line-height: 1.6rem;
     word-break: break-word;
     background: var(--theme);
 }
