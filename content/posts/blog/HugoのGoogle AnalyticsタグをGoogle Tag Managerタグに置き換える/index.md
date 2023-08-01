@@ -14,7 +14,7 @@ tags: ["blog","Hugo","Google Analytics", "Google Tag Manager"]
 date: 2023-02-25T14:12:28+09:00
 ---
 
-## Hugoには組み込みのGoogle Analyticsタグ挿入機能
+## Hugoには組み込みのGoogle Analyticsタグ挿入機能がある
 
 Hugoには組み込みのGoogle Analyticsタグ挿入機能がある。 \
 [Internal Templates | Hugo](https://gohugo.io/templates/internal/#google-analytics) \
