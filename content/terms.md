@@ -11,7 +11,7 @@ showtoc: false
 <!-- https://blog-bootcamp.jp/start/blog-privacy-policy/ -->
 <!-- https://shared.gmocloud.com/lp/iinkai/privacy/ -->
 <!-- https://www.conoha.jp/lets-wp/wp-privacypolicy/ -->
-
+<!-- https://support.google.com/analytics/answer/2700409?hl=ja -->
 
 ### Disclamer
 
@@ -61,6 +61,14 @@ Cookieを無効にする方法やGoogleアドセンスに関する詳細は「�
 - アクセス解析や広告配信などのためにCookieを使用しています
 - これらのCookieによって個人の識別はできません
 - CookieをOFFにしても閲覧に問題はありません
+
+<!-- https://marketingplatform.google.com/about/analytics/terms/jp/ 
+
+https://marketingplatform.google.com/about/analytics/terms/jp/
+お客様は適切なプライバシー ポリシーを用意および遵守し、ユーザーからの情報を収集するうえで、適用されるすべての法律、ポリシー、規制を遵守するものとします。お客様はプライバシー ポリシーを公開し、そのプライバシー ポリシーで Cookie の使用、モバイル デバイスの識別情報（Android の広告識別子、iOS の広告識別子など）、またはデータの収集に使われる類似の技術について必ず通知するものとします。また、Google アナリティクスを使用していること、および Google アナリティクスでデータが収集、処理される仕組みについても開示する必要があります。こうした情報を開示するには、「ユーザーが Google パートナーのサイトやアプリを使用する際の Google によるデータ使用」のページ（www.google.com/intl/ja/policies/privacy/partners/ または Google が随時提供するその他の URL）へのリンクを⽬立つように表示します。
+
+-->
+
 <!-- 
 Cookieによりブラウザを識別していますが、特定の個人の識別はできない状態で匿名性が保たれています。
 
@@ -80,8 +88,10 @@ Cookieの使用を望まない場合、ブラウザからCookieを無効に設�
 なお、全てのコメントは管理人が事前にその内容を確認し、承認した上での掲載となります。あらかじめご了承ください。
 -->
 
-
-
+<!-- 
+Github Pages
+https://docs.github.com/en/pages/getting-started-with-github-pages/about-github-pages#data-collection
+-->
 
 
 ### 著作権について
