@@ -1,6 +1,6 @@
 ---
 # draft: true
-slug: "ghpages-use-customdomain"
+slug: "replace-hugo-builtin-gatag"
 title: "HugoのGoogle AnalyticsタグをGoogle Tag Managerタグに置き換える"
 description: "HugoのGoogle AnalyticsタグをGoogle Tag Managerタグに置き換える方法"
 tags: ["blog","Hugo","Google Analytics", "Google Tag Manager"]
