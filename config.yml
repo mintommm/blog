@@ -100,8 +100,8 @@ enableGitInfo: true
 frontmatter:
   lastmod:
     - lastmod
-    - :fileModTime
     - :git
+    - :fileModTime
 
 enableRobotsTXT: true
 
@@ -112,7 +112,7 @@ markup:
 
 minify:
   disableXML: true
-  minifyOutput: false
+  minifyOutput: true
 
 # buildDrafts: false  # Moved to config/ dir
 buildFuture: false
