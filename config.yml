@@ -114,6 +114,6 @@ minify:
   disableXML: true
   minifyOutput: true
 
-buildDrafts: false
+# buildDrafts: false  # Moved to config/ dir
 buildFuture: false
 buildExpired: false
