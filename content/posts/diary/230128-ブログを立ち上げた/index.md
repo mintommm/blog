@@ -1,6 +1,6 @@
 ---
 # draft: true
-slug: "created-this-blog"
+slug: "230128-created-this-blog"
 title: "ブログを立ち上げた"
 # description: ""
 tags: ["diary","blog"]
