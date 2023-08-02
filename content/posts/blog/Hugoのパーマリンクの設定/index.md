@@ -1,8 +1,8 @@
 ---
 # draft: true
-slug: "parmalink-setting"
-title: "パーマリンクの設定"
-description: "パーマリンクを設定する"
+slug: "hugo-parmalink-setting"
+title: "Hugoのパーマリンクの設定"
+description: "Hugoでパーマリンクを設定する"
 tags: ["blog", "Hugo"]
 # showtoc: false
 # cover:
