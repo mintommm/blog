@@ -12,6 +12,7 @@ tags: ["blog","Hugo","Google Analytics", "Google Tag Manager"]
 #     relative: false # when using page bundles set this to true
 #     hidden: true # only hide on current single page
 date: 2023-02-25T14:12:28+09:00
+lastmod: 2023-03-01
 ---
 
 ## Hugoには組み込みのGoogle Analyticsタグ挿入機能がある

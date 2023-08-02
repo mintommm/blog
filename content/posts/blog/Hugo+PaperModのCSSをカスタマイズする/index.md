@@ -12,6 +12,7 @@ tags: ["blog","Hugo","PaperMod", "CSS"]
 #     relative: false # when using page bundles set this to true
 #     hidden: true # only hide on current single page
 date: 2023-02-05T05:25:10Z
+lastmod: 2023-02-05
 ---
 
 ## CSSの変更方法

@@ -11,6 +11,7 @@ tags: ["blog","Hugo","Github Pages"]
 #     relative: false # when using page bundles set this to true
 #     hidden: true # only hide on current single page
 date: 2023-01-29
+lastmod: 2023-02-05
 ---
 
 ## カスタムドメインの検証

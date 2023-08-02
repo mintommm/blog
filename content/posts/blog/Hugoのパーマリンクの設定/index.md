@@ -12,6 +12,7 @@ tags: ["blog", "Hugo"]
 #     relative: false # when using page bundles set this to true
 #     hidden: true # only hide on current single page
 date: 2023-03-05T21:52:57+09:00
+# lastmod: 2023-08-02
 ---
 
 デフォルトのHugoでは`contents`以下のディレクトリ構造がそのままURLに反映される。

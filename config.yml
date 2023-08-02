@@ -74,8 +74,8 @@ enableGitInfo: true
 frontmatter:
   lastmod:
     - lastmod
-    - :fileModTime
     - :git
+    - :fileModTime
 
 permalinks:
   posts: /posts/:slug
