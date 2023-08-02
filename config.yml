@@ -1,5 +1,6 @@
 baseURL: "https://tryk.dev/"
-title: tryk.dev
+title: "tryk.dev"
+# copyright: "test"
 defaultContentLanguage: ja
 hasCJKLanguage: true
 
@@ -77,6 +78,7 @@ permalinks:
   posts: /posts/:slug
 
 taxonomies:
+  archives: "archives"
   tag: "tags"
   # category: "categories"
 
@@ -87,25 +89,16 @@ menu:
       url: /profile/
       weight: 10
 
-    # - identifier: categories
-    #   name: Categories
-    #   url: /categories/
-    #   weight: 10
+    - identifier: archives
+      name: Archives
+      url: /archives/
+      weight: 20
 
     - identifier: tags
       name: Tags
       url: /tags/
-      weight: 20
-
-    - identifier: archives
-      name: Archives
-      url: /archives/
       weight: 30
 
-    - identifier: terms
-      name: Terms
-      url: /terms/
-      weight: 40
 
 
 enableGitInfo: true
