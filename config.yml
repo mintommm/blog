@@ -70,6 +70,13 @@ params:
     hiddenInSingle: true # hide on single page
 
 
+enableGitInfo: true
+frontmatter:
+  lastmod:
+    - lastmod
+    - :git
+    - :fileModTime
+
 permalinks:
   posts: /posts/:slug
 
@@ -93,15 +100,6 @@ menu:
       name: Tags
       url: /tags/
       weight: 30
-
-
-
-enableGitInfo: true
-frontmatter:
-  lastmod:
-    - lastmod
-    - :git
-    - :fileModTime
 
 enableRobotsTXT: true
 
