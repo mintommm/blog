@@ -3,8 +3,8 @@ title: tryk.dev
 
 defaultContentLanguage: ja
 hasCJKLanguage: true
+timeZone:	Asia/Tokyo
 
-paginate: 10
 theme: PaperMod
 
 params:
@@ -74,8 +74,8 @@ enableGitInfo: true
 frontmatter:
   lastmod:
     - lastmod
-    - :git
     - :fileModTime
+    - :default
 
 permalinks:
   posts: /posts/:slug

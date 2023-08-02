@@ -4,11 +4,14 @@ on:
   push:
     branches:
       - main  # Set a branch name to trigger deployment
+  pull_request:
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
@@ -24,8 +27,8 @@ jobs:
           extended: true
 
       - name: Build
-        env: 
-          TZ: "Asia/Tokyo" # タイムゾーンを指定
+        # env: 
+        #   TZ: "Asia/Tokyo" # タイムゾーンを指定
         run: hugo --minify
 
     #   - name: Deploy
