@@ -1,28 +1,26 @@
 baseURL: "https://tryk.dev/"
 title: tryk.dev
+
 defaultContentLanguage: ja
+hasCJKLanguage: true
 
 paginate: 10
 theme: PaperMod
 
-# googleAnalytics: "G-3KPT2YVDR4"
-
 params:
   # env: production # to enable google analytics, opengraph, twitter-cards and schema.
+
   title: "tryk.dev"
-  description: "This is Terry's pages"
+  # description: "Welcome to my blog. This is Terry's pages."
   keywords: [Blog, Portfolio, PaperMod]
-  images: ["<link or path of image for opengraph, twitter-cards>"]
+  # images: ["<link or path of image for opengraph, twitter-cards>"]
+
   DateFormat: "2006-01-02"
   defaultTheme: auto # dark, light
   
   gtm_id: "GTM-5MJ49XP"
   gtm_datalayer: "basic"
   gtm_endpoint: "sgtm.tryk.dev"
-  # analytics:
-  #   google:
-  #     SiteVerificationTag: "G-3KPT2YVDR4"
-
 
   ShowReadingTime: false
   ShowShareButtons: false
@@ -55,8 +53,8 @@ params:
 
   # home-info mode
   homeInfoParams:
-    Title: "Hi there \U0001F44B"
-    Content: Welcome to my blog
+    Title: "tryk.dev"
+    Content: Welcome to my blog. This is Terry's pages.
 
   socialIcons:
     - name: twitter
@@ -76,8 +74,8 @@ permalinks:
   posts: /posts/:slug
 
 taxonomies:
+  # archives: "archives"
   tag: "tags"
-  # category: "categories"
 
 menu:
   main:
@@ -86,25 +84,16 @@ menu:
       url: /profile/
       weight: 10
 
-    # - identifier: categories
-    #   name: Categories
-    #   url: /categories/
-    #   weight: 10
+    - identifier: archives
+      name: Archives
+      url: /archives/
+      weight: 20
 
     - identifier: tags
       name: Tags
       url: /tags/
-      weight: 20
-
-    - identifier: archives
-      name: Archives
-      url: /archives/
       weight: 30
 
-    - identifier: terms
-      name: Terms
-      url: /terms/
-      weight: 40
 
 
 enableGitInfo: true
@@ -123,8 +112,8 @@ markup:
 
 minify:
   disableXML: true
-  minifyOutput: true
+  minifyOutput: false
 
-buildDrafts: false
+# buildDrafts: false  # Moved to config/ dir
 buildFuture: false
 buildExpired: false
