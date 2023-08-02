@@ -12,7 +12,7 @@ params:
 
   title: "tryk.dev"
   # description: ""
-  keywords: [Blog, Portfolio]
+  keywords: [Blog, Portfolio, PaperMod]
   # images: ["<link or path of image for opengraph, twitter-cards>"]
 
   DateFormat: "2006-01-02"

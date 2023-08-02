@@ -104,6 +104,11 @@ https://docs.github.com/en/pages/getting-started-with-github-pages/about-github-
 当ブログは著作権や肖像権の侵害を目的としたものではありません。著作権や肖像権に関して問題がございましたら、お問い合わせフォームよりご連絡ください。迅速に対応いたします。 -->
 
 
+### Hugo, PaperMod
+
+- このブログは[Hugo](https://gohugo.io/)と[PaperMod](https://github.com/adityatelange/hugo-PaperMod/)をもとに作成されています
+
+
 ### Contacts
 
 [問い合わせフォーム](https://docs.google.com/forms/d/e/1FAIpQLSepkXMchWsP5mlHGBbC6fFmxa9MWCV5FKGRIVgDIsSXw2K0Qg/viewform)
