@@ -74,7 +74,7 @@ permalinks:
   posts: /posts/:slug
 
 taxonomies:
-  archives: "archives"
+  # archives: "archives"
   tag: "tags"
 
 menu:
@@ -100,8 +100,8 @@ enableGitInfo: true
 frontmatter:
   lastmod:
     - lastmod
-    - :fileModTime
     - :git
+    - :fileModTime
 
 enableRobotsTXT: true
 
