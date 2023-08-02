@@ -11,9 +11,9 @@ params:
   # env: production # to enable google analytics, opengraph, twitter-cards and schema.
 
   title: "tryk.dev"
-  # description: ""
+  description: "Welcome to my blog. This is Terry's pages."
   keywords: [Blog, Portfolio, PaperMod]
-  # images: ["<link or path of image for opengraph, twitter-cards>"]
+  images: ["<link or path of image for opengraph, twitter-cards>"]
 
   DateFormat: "2006-01-02"
   defaultTheme: auto # dark, light
