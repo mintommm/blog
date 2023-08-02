@@ -1,4 +1,4 @@
-baseURL: "https://tryk.dev/"
+baseURL: https://tryk.dev/
 title: tryk.dev
 
 defaultContentLanguage: ja
@@ -10,17 +10,17 @@ theme: PaperMod
 params:
   # env: production # to enable google analytics, opengraph, twitter-cards and schema.
 
-  title: "tryk.dev"
+  title: tryk.dev
   # description: "Welcome to my blog. This is Terry's pages."
   keywords: [Blog, Portfolio, PaperMod]
   # images: ["<link or path of image for opengraph, twitter-cards>"]
 
-  DateFormat: "2006-01-02"
+  DateFormat: 2006-01-02
   defaultTheme: auto # dark, light
   
-  gtm_id: "GTM-5MJ49XP"
-  gtm_datalayer: "basic"
-  gtm_endpoint: "sgtm.tryk.dev"
+  gtm_id: GTM-5MJ49XP
+  gtm_datalayer: basic
+  gtm_endpoint: sgtm.tryk.dev
 
   ShowReadingTime: false
   ShowShareButtons: false
@@ -40,29 +40,29 @@ params:
   assets:
     # disableHLJS: true # to disable highlight.js
     # disableFingerprinting: true
-    favicon: "/icon/favicon.ico"
-    favicon16x16: "/icon/favicon-16x16.png"
-    favicon32x32: "/icon/favicon-32x32.png"
-    apple_touch_icon: "/icon/apple-touch-icon.png"
+    favicon: /icon/favicon.ico
+    favicon16x16: /icon/favicon-16x16.png
+    favicon32x32: /icon/favicon-32x32.png
+    apple_touch_icon: /icon/apple-touch-icon.png
     # safari_pinned_tab: "<link / abs url>"
 
   label:
-    text: "tryk.dev"
+    text: tryk.dev
     # icon: /icon/apple-touch-icon.png
     iconHeight: 35
 
   # home-info mode
   homeInfoParams:
-    Title: "tryk.dev"
+    Title: tryk.dev
     Content: Welcome to my blog. This is Terry's pages.
 
   socialIcons:
     - name: twitter
-      url: "https://twitter.com/mintommm"
+      url: https://twitter.com/mintommm
     - name: github
-      url: "https://github.com/mintommm"
+      url: https://github.com/mintommm
     - name: linkedin
-      url: "https://www.linkedin.com/in/terrykurumatani/"
+      url: https://www.linkedin.com/in/terrykurumatani/
 
   cover:
     hidden: true # hide everywhere but not in structured data
@@ -74,15 +74,14 @@ enableGitInfo: true
 frontmatter:
   lastmod:
     - lastmod
-    - :git
     - :fileModTime
+    - :git
 
 permalinks:
   posts: /posts/:slug
 
 taxonomies:
-  # archives: "archives"
-  tag: "tags"
+  tag: tags
 
 menu:
   main:
