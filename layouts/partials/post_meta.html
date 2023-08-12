@@ -12,7 +12,7 @@
 {{- end }}
 
 {{- if .GitInfo }}
-  <p>Last commit: {{ .GitInfo.AbbreviatedHash }} {{.GitInfo.CommitDate}}</p>
+  <p>Last commit: {{ .GitInfo.AuthorDate }} {{ .GitInfo.CommitDate }}</p>
 {{- end }}
 
 {{- if (.Param "ShowReadingTime") -}}
