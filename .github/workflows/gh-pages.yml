@@ -40,7 +40,8 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         if: github.ref == 'refs/heads/main'
         with:
-          deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
+          # deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           external_repository: mintommm/mintommm.github.io
           publish_branch: main
           cname: tryk.dev
