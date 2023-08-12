@@ -23,4 +23,8 @@ date: 2023-08-12T15:32:22Z
 - enableGitInfo = true だけではだめだった
 - https://discourse.gohugo.io/t/problems-with-gitinfo-in-ci/22480
 - CIでうまく行かないことがある、みたいなやつは↑だが、これも違った
+- https://crieit.net/posts/github-actions-build-lastmod
+- https://tech-wafter.net/2020/solved-issue-with-github-actions-lastmod-updates-being-applied-to-all-the-articles/
 
+- https://molina.jp/blog/hugo%E3%81%A6%E6%9B%B4%E6%96%B0%E6%97%A5%E6%99%82%E3%81%AE%E7%AE%A1%E7%90%86/
+- これで解決の緒が見えた
