@@ -3,7 +3,7 @@ name: GitHub Pages
 on:
   push:
     branches:
-      - main  # Set a branch name to trigger deployment
+      - main
   pull_request:
   workflow_dispatch:
 
@@ -15,14 +15,17 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
-      - name: disable quotePath  # For unicode file path
-        run: git config --global core.quotePath false
-        # https://github.com/peaceiris/actions-hugo/issues/496
+      # - name: disable quotePath
+      #   run: git config --global core.quotePath false
+      #   # https://github.com/peaceiris/actions-hugo/issues/496
 
       - uses: actions/checkout@v3
         with:
           submodules: true  # Fetch Hugo themes (true OR recursive)
           fetch-depth: 0    # Fetch all history for .GitInfo and .Lastmod
+
+      - name: Disable quotePath  # Non-ascii Filename
+        run: git config core.quotePath false
 
       - name: Setup Hugo
         uses: peaceiris/actions-hugo@v2
@@ -32,7 +35,7 @@ jobs:
 
       - name: Build
         env: 
-          TZ: Asia/Tokyo  # タイムゾーンを指定
+          TZ: Asia/Tokyo
         run: hugo --minify --enableGitInfo
 
       - name: Deploy
