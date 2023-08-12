@@ -5,6 +5,7 @@ title: "ブログを立ち上げた"
 # description: ""
 tags: ["diary","blog"]
 date: 2023-01-28
+lastmod: 2023-01-28
 ---
 
 このブログを立ち上げた。
