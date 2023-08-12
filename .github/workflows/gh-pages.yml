@@ -36,7 +36,7 @@ jobs:
       - name: Build
         env: 
           TZ: Asia/Tokyo
-        run: hugo --minify --enableGitInfo
+        run: hugo --minify
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
