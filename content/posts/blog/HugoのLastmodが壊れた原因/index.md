@@ -20,4 +20,7 @@ date: 2023-08-12T15:32:22Z
 
 - Depthではなかった
 - 全部の記事のlastmodが最新日に揃って同じになっていた
-- 
+- enableGitInfo = true だけではだめだった
+- https://discourse.gohugo.io/t/problems-with-gitinfo-in-ci/22480
+- CIでうまく行かないことがある、みたいなやつは↑だが、これも違った
+
