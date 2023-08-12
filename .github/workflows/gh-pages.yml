@@ -15,6 +15,10 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
+      - name: disable quotePath  # For unicode file path
+        run: git config --global core.quotePath false
+        # https://github.com/peaceiris/actions-hugo/issues/496
+
       - uses: actions/checkout@v3
         with:
           submodules: true  # Fetch Hugo themes (true OR recursive)
