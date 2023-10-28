@@ -105,9 +105,9 @@ menu:
 enableRobotsTXT: true
 
 # markup:
-  goldmark:
-    renderer:
-      unsafe: true
+  # goldmark:
+  #   renderer:
+  #     unsafe: true
 
 markup:
   highlight:
