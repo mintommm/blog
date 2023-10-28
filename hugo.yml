@@ -45,6 +45,7 @@ params:
     favicon32x32: /icon/favicon-32x32.png
     apple_touch_icon: /icon/apple-touch-icon.png
     # safari_pinned_tab: "<link / abs url>"
+    disableHLJS: true
 
   label:
     text: tryk.dev
@@ -104,9 +105,22 @@ menu:
 enableRobotsTXT: true
 
 # markup:
-#   goldmark:
-#     renderer:
-#       unsafe: true
+  goldmark:
+    renderer:
+      unsafe: true
+
+markup:
+  highlight:
+    # anchorLineNos: true
+    codeFences: true
+    guessSyntax: true
+    lineNos: true
+    # noClasses: false
+    style: solarized-dark
+  # goldmark:
+  #   renderer:
+  #     unsafe: true
+
 
 minify:
   disableXML: true
