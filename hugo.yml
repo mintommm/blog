@@ -54,7 +54,7 @@ params:
   # home-info mode
   homeInfoParams:
     Title: tryk.dev
-    Content: Welcome to my blog. This is Terry's pages.
+    Content: Welcome. This is TerryK's pages.
 
   socialIcons:
     - name: twitter
