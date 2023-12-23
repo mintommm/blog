@@ -116,9 +116,9 @@ markup:
     lineNos: true
     # noClasses: false
     style: solarized-dark
-  # goldmark:
-  #   renderer:
-  #     unsafe: true
+  goldmark:
+    renderer:
+      unsafe: true
 
 
 minify:
