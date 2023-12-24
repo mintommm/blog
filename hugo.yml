@@ -117,6 +117,12 @@ markup:
     # noClasses: false
     style: solarized-dark
   goldmark:
+    extensions:
+      cjk:
+        eastAsianLineBreaks: true
+        eastAsianLineBreaksStyle: css3draft
+        enable: true
+        escapedSpace: true
     renderer:
       unsafe: true
 
