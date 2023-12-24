@@ -109,13 +109,7 @@ enableRobotsTXT: true
   #     unsafe: true
 
 markup:
-  highlight:
-    # anchorLineNos: true
-    codeFences: true
-    guessSyntax: true
-    lineNos: true
-    # noClasses: false
-    style: solarized-dark
+  defaultMarkdownHandler: goldmark
   goldmark:
     extensions:
       cjk:
@@ -125,7 +119,15 @@ markup:
         escapedSpace: true
     renderer:
       unsafe: true
-
+  asciidocext:
+    preserveTOC: false
+  highlight:
+    # anchorLineNos: true
+    codeFences: true
+    guessSyntax: true
+    lineNos: true
+    # noClasses: false
+    style: solarized-dark
 
 minify:
   disableXML: true
