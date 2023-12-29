@@ -104,6 +104,14 @@ https://docs.github.com/en/pages/getting-started-with-github-pages/about-github-
 当ブログは著作権や肖像権の侵害を目的としたものではありません。著作権や肖像権に関して問題がございましたら、お問い合わせフォームよりご連絡ください。迅速に対応いたします。 -->
 
 
+### Amazonアソシエイト
+
+- tryk.dev は、Amazon.co.jp を宣伝しリンクすることによってサイトが紹介料を獲得できる手段を提供することを目的に設定されたアフィリエイトプログラムである、Amazonアソシエイト・プログラムの参加者です。
+<!-- https://affiliate.amazon.co.jp/resource-center/sharing-amazon-links-on-social-media -->
+- Amazonのアソシエイトとして、tryk.dev は適格販売により収入を得ています。
+<!-- https://affiliate.amazon.co.jp/help/operating/agreement -->
+
+
 ### Hugo, PaperMod
 
 - このブログは[Hugo](https://gohugo.io/)と[PaperMod](https://github.com/adityatelange/hugo-PaperMod/)をもとに作成されています
