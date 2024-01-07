@@ -63,6 +63,10 @@ This is `inline`.
 #### Images（画像）
 ![sample](/img/sample/sample.png)
 
+{{ with .Resources.GetMatch "sample.jpg" }} {{ with .Process "800x webp" }}
+<img alt="" src="{{ .RelPermalink }}" width="{{ .Width }}" height="{{ .Height }}" style="background-color: #cccc">
+{{ end }} {{ end }}
+
 #### Tables（表）
 | id     | name    | date       |
 | ------ | ------- | ---------- |
