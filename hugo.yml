@@ -129,6 +129,10 @@ markup:
     # noClasses: false
     style: solarized-dark
 
+imaging:
+  quality: 50
+  resampleFilter: MitchellNetravali
+
 minify:
   disableXML: true
   minifyOutput: true
