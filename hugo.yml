@@ -21,7 +21,7 @@ params:
   gtm_id: GTM-PB2GPP2J
   # gtm_id: GTM-5MJ49XP
   gtm_datalayer: basic
-  gtm_endpoint: tryk.dev/sgtm
+  # gtm_endpoint: tryk.dev/sgtm
 
   ShowReadingTime: false
   ShowShareButtons: false
