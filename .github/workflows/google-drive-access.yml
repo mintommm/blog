@@ -50,7 +50,7 @@ jobs:
     - name: Install uv and dependencies
       run: |
         python -m pip install --upgrade pip uv
-        uv sync # uv.lockに基づいて依存関係をインストール (システムパッケージは参照しない)
+        uv sync -v # uv.lockに基づいて依存関係をインストール (詳細ログ出力)
 
     - name: Restore content cache
       id: cache-content
