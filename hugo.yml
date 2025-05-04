@@ -17,7 +17,7 @@ params:
 
   DateFormat: 2006-01-02
   defaultTheme: auto # dark, light
-  
+
   gtm_id: GTM-PB2GPP2J
   # gtm_id: GTM-5MJ49XP
   gtm_datalayer: basic
