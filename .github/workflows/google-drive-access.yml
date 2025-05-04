@@ -32,93 +32,15 @@ jobs:
     - name: Disable quotePath # 非ASCIIファイル名対応
       run: git config core.quotePath false
 
-    # --- Direct Workload Identity Federation Steps ---
-    - name: Install jq
-      run: sudo apt-get update && sudo apt-get install -y jq
-
-    - name: Get GitHub OIDC token
-      id: oidc_token
-      uses: actions/github-script@v7
+    # --- Authenticate to Google Cloud using google-github-actions/auth ---
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
       with:
-        script: |
-          const audience = process.env.GCP_WIF_PROVIDER;
-          if (!audience) {
-            core.setFailed('GCP_WIF_PROVIDER environment variable is not set.');
-            return;
-          }
-          console.log(`Requesting OIDC token with audience: ${audience}`);
-          const token = await core.getIDToken(audience);
-          core.setOutput('token', token);
-        result-encoding: string
-      env:
-        GCP_WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }} # GitHub Secretsに設定してください (プロバイダー名)
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }} # GitHub Secretsに設定してください (サービスアカウントメール)
 
-    - name: Exchange GitHub OIDC token for Google Access Token
-      id: google_token
-      run: |
-        # Construct the STS request payload
-        # Note: Adjust the scope as needed for the APIs your script uses (e.g., drive, storage)
-        read -r -d '' STS_PAYLOAD << EOM
-        {
-          "audience": "//iam.googleapis.com/${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}",
-          "grantType": "urn:ietf:params:oauth:grant-type:token-exchange",
-          "requestedTokenType": "urn:ietf:params:oauth:token-type:access_token",
-          "scope": "https://www.googleapis.com/auth/drive.readonly",
-          "subjectTokenType": "urn:ietf:params:oauth:token-type:jwt",
-          "subjectToken": "${{ steps.oidc_token.outputs.token }}"
-        }
-        EOM
-        echo "--- STS Request Payload ---"
-        echo "$STS_PAYLOAD"
-        echo "---------------------------"
-
-        # Exchange the token using Google STS API with verbose output, not silent
-        echo "--- curl STS Request ---"
-        # Remove -s, keep -v
-        ACCESS_TOKEN_RESPONSE=$(curl -v -X POST "https://sts.googleapis.com/v1/token" \
-          -H "Content-Type: application/json" \
-          -d "$STS_PAYLOAD")
-        CURL_EXIT_CODE=$?
-        echo # Add a newline for better log separation
-        echo "--- curl STS Response Body ---"
-        echo "$ACCESS_TOKEN_RESPONSE"
-        echo "-----------------------------"
-        echo "curl exit code: $CURL_EXIT_CODE"
-
-        if [ $CURL_EXIT_CODE -ne 0 ]; then
-          echo "::error::curl command failed with exit code $CURL_EXIT_CODE."
-          # No need to print response here, curl -v should have shown it
-          exit 1
-        fi
-
-        # Basic check for error in response instead of relying on jq parsing
-        # Check if the response contains '"error":'
-        if echo "$ACCESS_TOKEN_RESPONSE" | grep -q '"error":'; then
-            echo "::error::Detected error in STS Response."
-            echo "Raw STS Response was:"
-            echo "$ACCESS_TOKEN_RESPONSE"
-            exit 1
-        fi
-
-        # If no error detected, try to extract token with jq (best effort for now)
-        ACCESS_TOKEN=$(echo "$ACCESS_TOKEN_RESPONSE" | jq -r .access_token)
-
-        # Final check if token is empty after potential jq parse
-        if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
-            echo "::error::Failed to extract access_token from STS response (jq parse failed or token empty)."
-            echo "Raw STS Response was:"
-            echo "$ACCESS_TOKEN_RESPONSE"
-            exit 1
-        fi
-
-        # Mask the token in logs and set it as output
-        echo "::add-mask::$ACCESS_TOKEN"
-        echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
-      env:
-         # Secrets are used directly in the payload construction above
-         GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-
-    # --- End Direct Workload Identity Federation Steps ---
+    # --- End Authentication Step ---
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -147,7 +69,8 @@ jobs:
       run: python main.py # Google Driveにアクセスするスクリプトを実行 (スクリプト内でファイル有無/更新日時を確認)
       env:
         GOOGLE_DRIVE_PARENT_ID: ${{ secrets.GOOGLE_DRIVE_PARENT_ID }} # GitHub Secretsから親ディレクトリIDを渡す
-        GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.google_token.outputs.access_token }} # Set the obtained Google Access Token
+        # google-github-actions/auth が設定する認証情報ファイルパスを使用
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
         # 他に必要な環境変数があればここに追加
 
     - name: Check for content update marker
