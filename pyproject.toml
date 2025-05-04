@@ -8,4 +8,7 @@ dependencies = [
     "google-api-python-client>=2.167.0",
     "pillow-avif-plugin>=1.5.1",
     "python-frontmatter>=1.1.0",
+    "google-auth-httplib2>=0.1.0", # Added for AuthorizedHttp
+    "httplib2>=0.20.0", # Added as dependency for google-auth-httplib2 and direct use
+    "tzdata", # Added for zoneinfo
 ]

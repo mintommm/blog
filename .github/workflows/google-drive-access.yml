@@ -1,0 +1,97 @@
+name: Download Content, Build and Deploy
+
+on:
+  schedule:
+    # UTCの 00:00, 06:00, 12:00, 18:00 に実行 (6時間ごと)
+    - cron: '0 0,6,12,18 * * *'
+  workflow_dispatch: # 手動実行を許可
+    inputs:
+      ignore_cache:
+        description: 'キャッシュを無視してコンテンツを強制的に再ダウンロードしますか？ (true/false)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  build_and_deploy: # ジョブ名を変更
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'write' # main.pyがcontentディレクトリに書き込むため & Cloudflare Pages Actionで必要になる可能性
+      id-token: 'write' # Workload Identity Federationに必要
+    concurrency: # 同時実行制御
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: true # Hugoテーマがサブモジュールの場合に必要
+        fetch-depth: 0 # Gitの履歴をすべて取得 (Lastmodなどに必要)
+
+    - name: Disable quotePath # 非ASCIIファイル名対応
+      run: git config core.quotePath false
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }} # GitHub Secretsに設定してください
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }} # GitHub Secretsに設定してください５６
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version-file: '.python-version' # .python-version ファイルからバージョンを読み込む
+
+    - name: Install uv and dependencies
+      run: |
+        python -m pip install --upgrade pip uv
+        uv sync --system-site-packages # uv.lockに基づいて依存関係をインストール
+
+    - name: Restore content cache
+      id: cache-content
+      if: github.event.inputs.ignore_cache != 'true' # 手動実行でignore_cacheがtrueでない場合のみ実行
+      uses: actions/cache@v4
+      with:
+        path: content # キャッシュ対象ディレクトリ
+        key: ${{ runner.os }}-markdown-content-${{ hashFiles('main.py') }} # OSとmain.pyのハッシュでキーを生成
+        # restore-keys: | # 必要に応じて古いキャッシュからの復元キーを追加
+        #   ${{ runner.os }}-markdown-content-
+
+    - name: Run Python script
+      run: python main.py # Google Driveにアクセスするスクリプトを実行 (スクリプト内でファイル有無/更新日時を確認)
+      env:
+        GOOGLE_DRIVE_PARENT_ID: ${{ secrets.GOOGLE_DRIVE_PARENT_ID }} # GitHub Secretsから親ディレクトリIDを渡す
+        # 他に必要な環境変数があればここに追加
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }} # google-github-actions/authが生成する認証情報ファイルパス
+
+    - name: Save content cache # ignore_cacheがtrueでない場合のみ実行 (main.pyによる変更を常に保存)
+      if: github.event.inputs.ignore_cache != 'true'
+      uses: actions/cache/save@v4 # actions/cache@v4 の if 条件で制御
+      with:
+        path: content # キャッシュ対象ディレクトリ
+        key: ${{ runner.os }}-markdown-content-${{ hashFiles('main.py') }} # 保存キーは復元キーと同じにする
+
+    # --- Hugo Build and Deploy Steps ---
+    - name: Setup Hugo
+      uses: peaceiris/actions-hugo@v3
+      with:
+        hugo-version: 'latest' # または特定のバージョンを指定
+        extended: true # SASS/SCSSを使用する場合はtrue
+
+    - name: Build Hugo site
+      env:
+        TZ: Asia/Tokyo # タイムゾーン設定
+      run: hugo --minify # minifyオプション付きでビルド
+
+    - name: Deploy to Cloudflare Pages
+      uses: cloudflare/pages-action@v1
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }} # GitHub Secretsに設定してください
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }} # GitHub Secretsに設定してください
+        projectName: ${{ secrets.CLOUDFLARE_PROJECT_NAME }} # GitHub Secretsに設定してください
+        directory: public # Hugoの出力ディレクトリ
+        # Optional: Branch specific deployment
+        # branch: main # デプロイ対象のブランチ (デフォルトはGitHub Actionsを実行したブランチ)
+        gitHubToken: ${{ secrets.GITHUB_TOKEN }} # Optional: For pull request previews
