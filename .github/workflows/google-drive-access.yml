@@ -32,12 +32,58 @@ jobs:
     - name: Disable quotePath # 非ASCIIファイル名対応
       run: git config core.quotePath false
 
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
+    # --- Direct Workload Identity Federation Steps ---
+    - name: Install jq
+      run: sudo apt-get update && sudo apt-get install -y jq
+
+    - name: Get GitHub OIDC token
+      id: oidc_token
+      uses: actions/github-script@v7
       with:
-        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }} # GitHub Secretsに設定してください
-        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }} # GitHub Secretsに設定してください５６
+        script: |
+          # Audience should be the Workload Identity Provider resource name
+          const token = await core.getIDToken('${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}')
+          core.setOutput('token', token)
+        result-encoding: string
+
+    - name: Exchange GitHub OIDC token for Google Access Token
+      id: google_token
+      run: |
+        # Construct the STS request payload
+        # Note: Adjust the scope as needed for the APIs your script uses (e.g., drive, storage)
+        read -r -d '' STS_PAYLOAD << EOM
+        {
+          "audience": "//iam.googleapis.com/${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}",
+          "grantType": "urn:ietf:params:oauth:grant-type:token-exchange",
+          "requestedTokenType": "urn:ietf:params:oauth:token-type:access_token",
+          "scope": "https://www.googleapis.com/auth/drive.readonly",
+          "subjectTokenType": "urn:ietf:params:oauth:token-type:jwt",
+          "subjectToken": "${{ steps.oidc_token.outputs.token }}"
+        }
+        EOM
+
+        # Exchange the token using Google STS API
+        ACCESS_TOKEN_RESPONSE=$(curl -s -X POST "https://sts.googleapis.com/v1/token" \
+          -H "Content-Type: application/json" \
+          -d "$STS_PAYLOAD")
+
+        ACCESS_TOKEN=$(echo "$ACCESS_TOKEN_RESPONSE" | jq -r .access_token)
+
+        # Check if access token was obtained
+        if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
+          echo "::error::Failed to obtain Google Access Token from STS."
+          echo "STS Response: $ACCESS_TOKEN_RESPONSE" # Print response for debugging
+          exit 1
+        fi
+
+        # Mask the token in logs and set it as output
+        echo "::add-mask::$ACCESS_TOKEN"
+        echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
+      env:
+         # Secrets are used directly in the payload construction above
+         GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+    # --- End Direct Workload Identity Federation Steps ---
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -59,12 +105,26 @@ jobs:
         # restore-keys: | # 必要に応じて古いキャッシュからの復元キーを追加
         #   ${{ runner.os }}-markdown-content-
 
+    - name: Remove old marker file # Previous marker file cleanup
+      run: rm -f .content-updated
+
     - name: Run Python script
       run: python main.py # Google Driveにアクセスするスクリプトを実行 (スクリプト内でファイル有無/更新日時を確認)
       env:
         GOOGLE_DRIVE_PARENT_ID: ${{ secrets.GOOGLE_DRIVE_PARENT_ID }} # GitHub Secretsから親ディレクトリIDを渡す
+        GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.google_token.outputs.access_token }} # Set the obtained Google Access Token
         # 他に必要な環境変数があればここに追加
-        GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }} # google-github-actions/authが生成する認証情報ファイルパス
+
+    - name: Check for content update marker
+      id: check_update_marker
+      run: |
+        if [ -f ".content-updated" ]; then
+          echo "Content was updated by main.py."
+          echo "content_was_updated=true" >> $GITHUB_OUTPUT
+        else
+          echo "Content was not updated by main.py."
+          echo "content_was_updated=false" >> $GITHUB_OUTPUT
+        fi
 
     - name: Save content cache # ignore_cacheがtrueでない場合のみ実行 (main.pyによる変更を常に保存)
       if: github.event.inputs.ignore_cache != 'true'
@@ -86,6 +146,8 @@ jobs:
       run: hugo --minify # minifyオプション付きでビルド
 
     - name: Deploy to Cloudflare Pages
+      # コンテンツが更新されたか、キャッシュ無視の場合のみデプロイ
+      if: steps.check_update_marker.outputs.content_was_updated == 'true' || github.event.inputs.ignore_cache == 'true'
       uses: cloudflare/pages-action@v1
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }} # GitHub Secretsに設定してください

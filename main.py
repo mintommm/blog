@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple, Callable, Literal
 # Third-party imports
 import frontmatter
 import google.auth
+import google.auth.credentials # Added for AccessToken
 import httplib2
 import PIL
 import pillow_avif
@@ -91,15 +92,48 @@ class GoogleDriveClient:
         return HttpRequest(new_http, *args, **kwargs)
 
     def _build_service(self) -> Optional[Resource]:
-        """Builds and returns the Drive v3 service object."""
+        """Builds and returns the Drive v3 service object using appropriate credentials."""
+        credentials = None
+        project = None
+        access_token = os.environ.get('GOOGLE_OAUTH_ACCESS_TOKEN')
+
+        if access_token:
+            logger.info("Using GOOGLE_OAUTH_ACCESS_TOKEN for authentication.")
+            try:
+                credentials = google.auth.credentials.AccessToken(access_token)
+                # Optionally, you might want to refresh the token if needed,
+                # but for short-lived tokens from STS, this might not be necessary.
+            except Exception as e:
+                logger.error(f"Failed to create credentials from access token: {e}")
+                # Fallback or raise error? For now, let's try default.
+                credentials = None # Ensure fallback is attempted
+
+        if not credentials:
+            logger.info("GOOGLE_OAUTH_ACCESS_TOKEN not found or failed, attempting google.auth.default().")
+            try:
+                # Fallback to default credentials (might pick up ADC if configured,
+                # or raise error if nothing is available)
+                credentials, project = google.auth.default(
+                    scopes=['https://www.googleapis.com/auth/drive.readonly']
+                )
+                logger.info(f"Using default credentials for project: {project or 'Default'}")
+            except google.auth.exceptions.DefaultCredentialsError as e:
+                logger.critical(f'Error getting default credentials: {e}')
+                logger.critical('Ensure GOOGLE_OAUTH_ACCESS_TOKEN is set or Application Default Credentials are configured.')
+                return None
+            except Exception as e:
+                logger.critical(f'Unexpected error getting default credentials: {e}')
+                return None
+
+        if not credentials:
+             logger.critical('Could not obtain valid credentials.')
+             return None
+
         try:
-            credentials, project = google.auth.default(
-                scopes=['https://www.googleapis.com/auth/drive.readonly']
-            )
-            logger.info(f"Using credentials for project: {project or 'Default'}")
+            # Build the service using the obtained credentials
             service: Resource = build(
                 'drive', 'v3',
-                requestBuilder=self._build_request,
+                # requestBuilder=self._build_request, # May not be needed with direct credentials
                 credentials=credentials
             )
             logger.info('Google Drive service built successfully.')
@@ -538,6 +572,9 @@ def process_single_file_task(
 def main() -> None:
     """Main function to orchestrate the document conversion process."""
     start_time = time.time()
+    content_updated: bool = False # Flag to track content changes
+    marker_file = Path('.content-updated')
+
     logger.info(f'Starting Google Docs to Markdown conversion at {datetime.now()}...')
 
     parent_folder_id = os.getenv('GOOGLE_DRIVE_PARENT_ID')
@@ -579,6 +616,7 @@ def main() -> None:
                 logger.info(f'  - Deleting {local_file_path.name}')
                 try:
                     local_file_path.unlink()
+                    content_updated = True # Mark as updated if deletion occurs
                 except OSError as e:
                     logger.error(f'    Error deleting file {local_file_path}: {e}')
         else:
@@ -609,8 +647,11 @@ def main() -> None:
             file_name = file_meta.get('name', f'ID: {file_id}')
             try:
                 status: ProcessStatus = future.result()
-                if status == 'success': results['success'] += 1
-                elif status == 'skipped': results['skipped'] += 1
+                if status == 'success':
+                    results['success'] += 1
+                    content_updated = True # Mark as updated if save occurs
+                elif status == 'skipped':
+                    results['skipped'] += 1
                 else:
                     results['failed'] += 1
                     logger.error(
@@ -642,9 +683,31 @@ def main() -> None:
     # Exit Status
     if results['failed'] > 0:
         logger.error('Exiting with error code 1 due to processing failures.')
-        exit(1)
+        exit_code = 1
     else:
         logger.info('Conversion completed successfully.')
+        exit_code = 0
+
+    # Create marker file if content was updated
+    if content_updated:
+        logger.info("Content was updated, creating marker file '.content-updated'.")
+        try:
+            marker_file.touch()
+        except OSError as e:
+            logger.error(f"Failed to create marker file: {e}")
+            # Decide if this should cause a failure? For now, just log.
+    else:
+        logger.info("No content updates detected, marker file not created.")
+        # Ensure marker file doesn't exist from previous runs if no updates
+        if marker_file.exists():
+             try:
+                 marker_file.unlink()
+                 logger.info("Removed existing marker file as no updates occurred.")
+             except OSError as e:
+                 logger.warning(f"Could not remove existing marker file: {e}")
+
+
+    exit(exit_code)
 
 
 if __name__ == '__main__':
