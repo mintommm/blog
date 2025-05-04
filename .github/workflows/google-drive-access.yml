@@ -41,10 +41,17 @@ jobs:
       uses: actions/github-script@v7
       with:
         script: |
-          # Audience should be the Workload Identity Provider resource name
-          const token = await core.getIDToken('${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}')
-          core.setOutput('token', token)
+          const audience = process.env.GCP_WIF_PROVIDER;
+          if (!audience) {
+            core.setFailed('GCP_WIF_PROVIDER environment variable is not set.');
+            return;
+          }
+          console.log(`Requesting OIDC token with audience: ${audience}`);
+          const token = await core.getIDToken(audience);
+          core.setOutput('token', token);
         result-encoding: string
+      env:
+        GCP_WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
     - name: Exchange GitHub OIDC token for Google Access Token
       id: google_token
