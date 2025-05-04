@@ -57,7 +57,7 @@ jobs:
       if: github.event.inputs.ignore_cache != 'true' # 手動実行でignore_cacheがtrueでない場合のみ実行
       uses: actions/cache@v4
       with:
-        path: content # キャッシュ対象ディレクトリ
+        path: content/google-drive # キャッシュ対象を main.py の出力先に限定
         key: ${{ runner.os }}-markdown-content-${{ hashFiles('main.py') }} # OSとmain.pyのハッシュでキーを生成
         # restore-keys: | # 必要に応じて古いキャッシュからの復元キーを追加
         #   ${{ runner.os }}-markdown-content-
@@ -88,7 +88,7 @@ jobs:
       if: github.event.inputs.ignore_cache != 'true'
       uses: actions/cache/save@v4 # actions/cache@v4 の if 条件で制御
       with:
-        path: content # キャッシュ対象ディレクトリ
+        path: content/google-drive # キャッシュ対象を main.py の出力先に限定
         key: ${{ runner.os }}-markdown-content-${{ hashFiles('main.py') }} # 保存キーは復元キーと同じにする
 
     # --- Hugo Build and Deploy Steps ---
