@@ -72,33 +72,43 @@ jobs:
         echo "$STS_PAYLOAD"
         echo "---------------------------"
 
-        # Exchange the token using Google STS API with verbose output
+        # Exchange the token using Google STS API with verbose output, not silent
         echo "--- curl STS Request ---"
+        # Remove -s, keep -v
         ACCESS_TOKEN_RESPONSE=$(curl -v -X POST "https://sts.googleapis.com/v1/token" \
           -H "Content-Type: application/json" \
           -d "$STS_PAYLOAD")
         CURL_EXIT_CODE=$?
-        echo "--- curl STS Response ---"
+        echo # Add a newline for better log separation
+        echo "--- curl STS Response Body ---"
         echo "$ACCESS_TOKEN_RESPONSE"
-        echo "-------------------------"
+        echo "-----------------------------"
         echo "curl exit code: $CURL_EXIT_CODE"
 
         if [ $CURL_EXIT_CODE -ne 0 ]; then
           echo "::error::curl command failed with exit code $CURL_EXIT_CODE."
+          # No need to print response here, curl -v should have shown it
           exit 1
         fi
 
-        # Attempt to parse the access token
-        ACCESS_TOKEN=$(echo "$ACCESS_TOKEN_RESPONSE" | jq -r .access_token)
-        JQ_EXIT_CODE=$?
-        echo "jq exit code: $JQ_EXIT_CODE"
+        # Basic check for error in response instead of relying on jq parsing
+        # Check if the response contains '"error":'
+        if echo "$ACCESS_TOKEN_RESPONSE" | grep -q '"error":'; then
+            echo "::error::Detected error in STS Response."
+            echo "Raw STS Response was:"
+            echo "$ACCESS_TOKEN_RESPONSE"
+            exit 1
+        fi
 
-        # Check if access token was obtained (jq succeeded and token is not empty/null)
-        if [ $JQ_EXIT_CODE -ne 0 ] || [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
-          echo "::error::Failed to obtain or parse Google Access Token from STS."
-          echo "Raw STS Response was:"
-          echo "$ACCESS_TOKEN_RESPONSE" # Print raw response again for clarity
-          exit 1
+        # If no error detected, try to extract token with jq (best effort for now)
+        ACCESS_TOKEN=$(echo "$ACCESS_TOKEN_RESPONSE" | jq -r .access_token)
+
+        # Final check if token is empty after potential jq parse
+        if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
+            echo "::error::Failed to extract access_token from STS response (jq parse failed or token empty)."
+            echo "Raw STS Response was:"
+            echo "$ACCESS_TOKEN_RESPONSE"
+            exit 1
         fi
 
         # Mask the token in logs and set it as output
