@@ -18,6 +18,7 @@ jobs:
     permissions:
       contents: 'write' # main.pyがcontentディレクトリに書き込むため & Cloudflare Pages Actionで必要になる可能性
       id-token: 'write' # Workload Identity Federationに必要
+      deployments: 'write' # Cloudflare Pages ActionがGitHub Deploymentを作成するために必要
     concurrency: # 同時実行制御
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
