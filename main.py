@@ -23,7 +23,6 @@ from typing import Any, Dict, List, Optional, Tuple, Callable, Literal
 # Third-party imports
 import frontmatter
 import google.auth
-import google.auth.credentials # Added for AccessToken
 import httplib2
 import PIL
 import pillow_avif
@@ -44,7 +43,7 @@ logger = logging.getLogger(__name__)
 # --- Constants and Configuration ---
 MAX_RETRIES: int = 3
 INITIAL_BACKOFF: float = 1.0
-OUTPUT_SUBDIR: str = 'content/google-drive' # Changed name for clarity
+OUTPUT_SUBDIR: str = 'content/google-drive'
 DEFAULT_TIMEZONE: str = 'Asia/Tokyo'
 IMAGE_WIDTH: int = 800
 IMAGE_QUALITY: int = 50
@@ -68,7 +67,7 @@ class GoogleDriveClient:
     """Handles interactions with the Google Drive API.
 
     Provides methods for authenticating, listing files, downloading documents,
-    and handling API retries.
+    and handling API retries. Ensures thread/process safety using requestBuilder.
 
     Attributes:
         service: An authenticated Google Drive API service instance.
@@ -76,72 +75,77 @@ class GoogleDriveClient:
 
     def __init__(self) -> None:
         """Initializes the GoogleDriveClient."""
+        # Get credentials once during initialization
+        self.credentials, self.project = self._get_credentials()
+        if not self.credentials:
+            raise RuntimeError('Failed to obtain Google Cloud credentials.')
+
+        # Build the service using the requestBuilder for safety
         self.service: Optional[Resource] = self._build_service()
         if not self.service:
-            # Error logged in _build_service
             raise RuntimeError(
-                'Failed to build Google Drive service. Check credentials.'
+                'Failed to build Google Drive service with obtained credentials.'
             )
+
+    def _get_credentials(self) -> Tuple[Optional[google.auth.credentials.Credentials], Optional[str]]:
+        """Gets credentials using Application Default Credentials (ADC)."""
+        try:
+            credentials, project = google.auth.default(
+                scopes=['https://www.googleapis.com/auth/drive.readonly']
+            )
+            logger.info(f"Successfully obtained credentials for project: {project or 'Default'}")
+            return credentials, project
+        except google.auth.exceptions.DefaultCredentialsError as e:
+            logger.critical(f'Error getting default credentials: {e}')
+            logger.critical(
+                'Ensure Application Default Credentials are configured '
+                '(e.g., GOOGLE_APPLICATION_CREDENTIALS env var is set by '
+                'google-github-actions/auth).'
+            )
+            return None, None
+        except Exception as e:
+            logger.critical(f'Unexpected error getting default credentials: {e}')
+            return None, None
 
     def _build_request(
         self, http: httplib2.Http, *args: Any, **kwargs: Any
     ) -> HttpRequest:
-        """Creates a new AuthorizedHttp object for thread safety."""
-        credentials, _ = google.auth.default()
-        new_http = AuthorizedHttp(credentials, http=httplib2.Http())
+        """Creates a new AuthorizedHttp object for each request (thread/process safe).
+
+        This method is passed to `googleapiclient.discovery.build` as the
+        `requestBuilder`. It ensures that each API request uses a fresh,
+        authorized `httplib2.Http` instance based on the stored credentials.
+
+        Args:
+            http: The original http object (ignored).
+            *args: Positional arguments for HttpRequest.
+            **kwargs: Keyword arguments for HttpRequest.
+
+        Returns:
+            A configured HttpRequest object.
+        """
+        if not self.credentials:
+             # This should ideally not happen if __init__ succeeded
+             raise RuntimeError("Credentials not available for building request.")
+        # Create a new AuthorizedHttp with a fresh httplib2.Http instance
+        new_http = AuthorizedHttp(self.credentials, http=httplib2.Http())
         return HttpRequest(new_http, *args, **kwargs)
 
     def _build_service(self) -> Optional[Resource]:
-        """Builds and returns the Drive v3 service object using appropriate credentials."""
-        credentials = None
-        project = None
-        access_token = os.environ.get('GOOGLE_OAUTH_ACCESS_TOKEN')
-
-        if access_token:
-            logger.info("Using GOOGLE_OAUTH_ACCESS_TOKEN for authentication.")
-            try:
-                credentials = google.auth.credentials.AccessToken(access_token)
-                # Optionally, you might want to refresh the token if needed,
-                # but for short-lived tokens from STS, this might not be necessary.
-            except Exception as e:
-                logger.error(f"Failed to create credentials from access token: {e}")
-                # Fallback or raise error? For now, let's try default.
-                credentials = None # Ensure fallback is attempted
-
-        if not credentials:
-            logger.info("GOOGLE_OAUTH_ACCESS_TOKEN not found or failed, attempting google.auth.default().")
-            try:
-                # Fallback to default credentials (might pick up ADC if configured,
-                # or raise error if nothing is available)
-                credentials, project = google.auth.default(
-                    scopes=['https://www.googleapis.com/auth/drive.readonly']
-                )
-                logger.info(f"Using default credentials for project: {project or 'Default'}")
-            except google.auth.exceptions.DefaultCredentialsError as e:
-                logger.critical(f'Error getting default credentials: {e}')
-                logger.critical('Ensure GOOGLE_OAUTH_ACCESS_TOKEN is set or Application Default Credentials are configured.')
-                return None
-            except Exception as e:
-                logger.critical(f'Unexpected error getting default credentials: {e}')
-                return None
-
-        if not credentials:
-             logger.critical('Could not obtain valid credentials.')
+        """Builds and returns the Drive v3 service object using requestBuilder."""
+        if not self.credentials:
+             logger.critical("Cannot build service without credentials.")
              return None
-
         try:
-            # Build the service using the obtained credentials
+            # Use requestBuilder to handle http object creation per request
             service: Resource = build(
                 'drive', 'v3',
-                # requestBuilder=self._build_request, # May not be needed with direct credentials
-                credentials=credentials
+                requestBuilder=self._build_request,
+                credentials=self.credentials, # Pass credentials for builder
+                cache_discovery=False # Avoid potential discovery cache issues
             )
             logger.info('Google Drive service built successfully.')
             return service
-        except google.auth.exceptions.DefaultCredentialsError as e:
-            logger.critical(f'Error getting credentials: {e}')
-            logger.critical('Ensure GOOGLE_APPLICATION_CREDENTIALS is set correctly.')
-            return None
         except Exception as e:
             logger.critical(f'Error building Drive service: {e}')
             return None
@@ -154,6 +158,8 @@ class GoogleDriveClient:
         backoff = INITIAL_BACKOFF
         while retries < MAX_RETRIES:
             try:
+                # The function `func` (e.g., _list_page, _download_all_chunks)
+                # will internally use the service object which uses the requestBuilder.
                 return func(*args, **kwargs)
             except HttpError as error:
                 status_code = getattr(getattr(error, 'resp', None), 'status', None)
@@ -189,8 +195,9 @@ class GoogleDriveClient:
             """Helper function to fetch a single page of file results."""
             if not self.service:
                 raise RuntimeError('Drive service is not initialized.')
+            # This execute() call will use the requestBuilder
             return self.service.files().list(
-                q=f"'{folder_id}' in parents and trashed = false", # Keep double quotes for f-string content
+                q=f"'{folder_id}' in parents and trashed = false",
                 spaces='drive',
                 fields='nextPageToken, files(id, name, mimeType, createdTime, modifiedTime)',
                 pageToken=token
@@ -210,6 +217,7 @@ class GoogleDriveClient:
                         logger.info(f'Scanning subfolder: {item_name} ({item_id})')
                         if item_id:
                             try:
+                                # Recursive call uses the same client instance
                                 all_files.extend(self.list_google_docs(item_id))
                             except Exception as sub_error:
                                 logger.error(
@@ -244,15 +252,19 @@ class GoogleDriveClient:
 
     def download_markdown(self, file_id: str, file_name: str) -> Optional[str]:
         """Downloads a Google Doc as Markdown, handling retries."""
+        # Uses self.service which is built with requestBuilder
         logger.info(f'Attempting download: {file_name} ({file_id})')
         if not self.service:
             logger.error('Drive service not initialized for download.')
             return None
         try:
+            # This export_media call will use the requestBuilder
             request = self.service.files().export_media(
                 fileId=file_id, mimeType='text/markdown'
             )
             fh = io.BytesIO()
+            # The http object used by MediaIoBaseDownload is derived from the
+            # service object, which uses the requestBuilder.
             downloader = MediaIoBaseDownload(
                 fh, request, chunksize=10 * 1024 * 1024
             )
@@ -262,10 +274,6 @@ class GoogleDriveClient:
                 done = False
                 while not done:
                     status, done = downloader.next_chunk(num_retries=0)
-                    # Log progress less frequently or remove if too verbose
-                    # if status:
-                    #     progress = int(status.progress() * 100)
-                    #     logger.debug(f"Download progress for {file_name}: {progress}%")
                 return fh
 
             downloaded_fh = self._execute_with_retry(_download_all_chunks)
@@ -540,8 +548,11 @@ def process_single_file_task(
 
     logger.info(f'Starting processing for: {file_name} ({file_id})')
 
+    # Each process needs its own client and processor instances
     try:
         processor = MarkdownProcessor(output_dir_str)
+        # Create a new client instance in the subprocess. This will build
+        # its own service object using the requestBuilder, ensuring safety.
         client = GoogleDriveClient()
     except Exception as init_error:
         logger.exception(f'Error initializing client/processor for {file_name}')
@@ -551,6 +562,7 @@ def process_single_file_task(
         if processor.check_cache(file_id, drive_modified_time):
             return 'skipped'
 
+        # Use the client instance created within this process
         md_content = client.download_markdown(file_id, file_name)
         if md_content is None: return 'download_error'
 
@@ -572,9 +584,6 @@ def process_single_file_task(
 def main() -> None:
     """Main function to orchestrate the document conversion process."""
     start_time = time.time()
-    content_updated: bool = False # Flag to track content changes
-    marker_file = Path('.content-updated')
-
     logger.info(f'Starting Google Docs to Markdown conversion at {datetime.now()}...')
 
     parent_folder_id = os.getenv('GOOGLE_DRIVE_PARENT_ID')
@@ -587,6 +596,7 @@ def main() -> None:
     logger.info(f'Output directory: {output_path.resolve()}')
 
     try:
+        # Initialize client for listing
         initial_client = GoogleDriveClient()
     except RuntimeError as e:
         logger.critical(f'Failed to initialize Google Drive client: {e}')
@@ -616,7 +626,6 @@ def main() -> None:
                 logger.info(f'  - Deleting {local_file_path.name}')
                 try:
                     local_file_path.unlink()
-                    content_updated = True # Mark as updated if deletion occurs
                 except OSError as e:
                     logger.error(f'    Error deleting file {local_file_path}: {e}')
         else:
@@ -647,11 +656,8 @@ def main() -> None:
             file_name = file_meta.get('name', f'ID: {file_id}')
             try:
                 status: ProcessStatus = future.result()
-                if status == 'success':
-                    results['success'] += 1
-                    content_updated = True # Mark as updated if save occurs
-                elif status == 'skipped':
-                    results['skipped'] += 1
+                if status == 'success': results['success'] += 1
+                elif status == 'skipped': results['skipped'] += 1
                 else:
                     results['failed'] += 1
                     logger.error(
@@ -683,31 +689,9 @@ def main() -> None:
     # Exit Status
     if results['failed'] > 0:
         logger.error('Exiting with error code 1 due to processing failures.')
-        exit_code = 1
+        exit(1)
     else:
         logger.info('Conversion completed successfully.')
-        exit_code = 0
-
-    # Create marker file if content was updated
-    if content_updated:
-        logger.info("Content was updated, creating marker file '.content-updated'.")
-        try:
-            marker_file.touch()
-        except OSError as e:
-            logger.error(f"Failed to create marker file: {e}")
-            # Decide if this should cause a failure? For now, just log.
-    else:
-        logger.info("No content updates detected, marker file not created.")
-        # Ensure marker file doesn't exist from previous runs if no updates
-        if marker_file.exists():
-             try:
-                 marker_file.unlink()
-                 logger.info("Removed existing marker file as no updates occurred.")
-             except OSError as e:
-                 logger.warning(f"Could not remove existing marker file: {e}")
-
-
-    exit(exit_code)
 
 
 if __name__ == '__main__':
