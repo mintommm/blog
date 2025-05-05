@@ -71,14 +71,15 @@ params:
     hiddenInSingle: true # hide on single page
 
 
-enableGitInfo: true
-frontmatter:
-  lastmod:
-    - lastmod
-    - :default
+# enableGitInfo: true
+# frontmatter:
+#   lastmod:
+#     - lastmod
+#     - :default
 
 permalinks:
-  posts: /posts/:slug
+  /: /:slug
+  posts: /blog/:slug
 
 taxonomies:
   tag: tags
