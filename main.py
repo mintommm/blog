@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # --- Constants and Configuration ---
 MAX_RETRIES: int = 3
 INITIAL_BACKOFF: float = 1.0
-OUTPUT_SUBDIR: str = 'content/google-drive'
+OUTPUT_SUBDIR: str = 'content/posts/google-drive'
 DEFAULT_TIMEZONE: str = 'Asia/Tokyo'
 IMAGE_WIDTH: int = 800
 IMAGE_QUALITY: int = 50

@@ -59,7 +59,7 @@ params:
 
   socialIcons:
     - name: twitter
-      url: https://twitter.com/mintommm
+      url: https://x.com/mintommm
     - name: github
       url: https://github.com/mintommm
     - name: linkedin
@@ -75,8 +75,6 @@ enableGitInfo: true
 frontmatter:
   lastmod:
     - lastmod
-    - :git
-    - :fileModTime
     - :default
 
 permalinks:
