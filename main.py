@@ -473,11 +473,12 @@ class MarkdownProcessor:
                  final_date_dt = final_date_dt.astimezone(self.tokyo_tz)
         elif isinstance(current_date_val, str):
             try:
-                # Use dateutil.parser.parse for flexible parsing
-                logger.info(f"Attempting to parse date string '{current_date_val}' using dateutil.")
+                # Use dateutil.parser.parse for flexible parsing after stripping whitespace
+                date_str_stripped = current_date_val.strip()
+                logger.info(f"Attempting to parse stripped date string '{date_str_stripped}' using dateutil.")
                 # default=datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
                 # can be used if only date is provided, but let's handle timezone explicitly
-                dt_parsed = dateutil_parser.parse(current_date_val)
+                dt_parsed = dateutil_parser.parse(date_str_stripped)
 
                 # Handle timezone: if naive, assume default; if aware, convert
                 if dt_parsed.tzinfo is None or dt_parsed.tzinfo.utcoffset(dt_parsed) is None:
@@ -515,9 +516,10 @@ class MarkdownProcessor:
                  final_lastmod_dt = final_lastmod_dt.astimezone(self.tokyo_tz)
         elif isinstance(current_lastmod_val, str):
             try:
-                # Use dateutil.parser.parse for flexible parsing
-                logger.info(f"Attempting to parse lastmod string '{current_lastmod_val}' using dateutil.")
-                dt_parsed = dateutil_parser.parse(current_lastmod_val)
+                # Use dateutil.parser.parse for flexible parsing after stripping whitespace
+                lastmod_str_stripped = current_lastmod_val.strip()
+                logger.info(f"Attempting to parse stripped lastmod string '{lastmod_str_stripped}' using dateutil.")
+                dt_parsed = dateutil_parser.parse(lastmod_str_stripped)
 
                 # Handle timezone: if naive, assume default; if aware, convert
                 if dt_parsed.tzinfo is None or dt_parsed.tzinfo.utcoffset(dt_parsed) is None:
