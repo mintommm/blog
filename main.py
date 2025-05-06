@@ -689,9 +689,40 @@ def main() -> None:
     # Exit Status
     if results['failed'] > 0:
         logger.error('Exiting with error code 1 due to processing failures.')
-        exit(1)
+        exit_code = 1
     else:
         logger.info('Conversion completed successfully.')
+        exit_code = 0
+
+    # --- Marker File Logic ---
+    content_updated = results['success'] > 0 or ids_to_delete # Determine if content was actually changed
+    marker_file = Path('.content-updated')
+    logger.info(f"Marker logic check: content_updated flag is: {content_updated}")
+
+    if content_updated:
+        logger.info("Attempting to create marker file '.content-updated'...")
+        try:
+            marker_file.touch()
+            if marker_file.exists():
+                 logger.info("Successfully created marker file.")
+            else:
+                 logger.error("Marker file creation attempted but file does not exist afterwards.")
+        except OSError as e:
+            logger.error(f"Failed to create marker file: {e}")
+            # Decide if this should cause a failure? For now, just log.
+    else:
+        logger.info("No content updates detected, marker file will not be created.")
+        # Ensure marker file doesn't exist from previous runs if no updates
+        if marker_file.exists():
+             logger.info("Attempting to remove existing marker file as no updates occurred...")
+             try:
+                 marker_file.unlink()
+                 logger.info("Successfully removed existing marker file.")
+             except OSError as e:
+                 logger.warning(f"Could not remove existing marker file: {e}")
+
+    logger.info(f"Exiting with code: {exit_code}")
+    exit(exit_code)
 
 
 if __name__ == '__main__':
