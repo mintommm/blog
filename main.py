@@ -17,7 +17,7 @@ import os
 import re
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, date # Import date
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple, Callable, Literal
@@ -463,15 +463,19 @@ class MarkdownProcessor:
         # Determine 'date' using dateutil.parser for flexibility
         current_date_val = post.get('date')
         final_date_dt: Optional[datetime] = None
-        if isinstance(current_date_val, datetime):
-            final_date_dt = current_date_val # Keep existing datetime object
+        if isinstance(current_date_val, datetime): # Handle existing datetime objects
+            final_date_dt = current_date_val
             if final_date_dt.tzinfo is None: # Ensure timezone awareness
                  logger.warning(f"Existing date '{current_date_val}' is naive. "
                                 f"Assigning default timezone {DEFAULT_TIMEZONE}.")
                  final_date_dt = final_date_dt.replace(tzinfo=self.tokyo_tz)
             else: # Convert to target timezone if different
                  final_date_dt = final_date_dt.astimezone(self.tokyo_tz)
-        elif isinstance(current_date_val, str):
+        elif isinstance(current_date_val, date): # Handle date objects (from YYYY-MM-DD)
+             logger.info(f"Frontmatter provided date object: {current_date_val}. Converting to datetime.")
+             # Combine date with midnight time and add default timezone
+             final_date_dt = datetime.combine(current_date_val, datetime.min.time()).replace(tzinfo=self.tokyo_tz)
+        elif isinstance(current_date_val, str): # Handle string values
             try:
                 # Use dateutil.parser.parse for flexible parsing after stripping whitespace
                 date_str_stripped = current_date_val.strip()
@@ -506,15 +510,19 @@ class MarkdownProcessor:
         # Determine 'lastmod' (similar logic to date, using modifiedTime as fallback)
         current_lastmod_val = post.get('lastmod')
         final_lastmod_dt: Optional[datetime] = None
-        if isinstance(current_lastmod_val, datetime):
-            final_lastmod_dt = current_lastmod_val # Keep existing datetime object
+        if isinstance(current_lastmod_val, datetime): # Handle existing datetime objects
+            final_lastmod_dt = current_lastmod_val
             if final_lastmod_dt.tzinfo is None: # Ensure timezone awareness
                  logger.warning(f"Existing lastmod '{current_lastmod_val}' is naive. "
                                 f"Assigning default timezone {DEFAULT_TIMEZONE}.")
                  final_lastmod_dt = final_lastmod_dt.replace(tzinfo=self.tokyo_tz)
             else: # Convert to target timezone if different
                  final_lastmod_dt = final_lastmod_dt.astimezone(self.tokyo_tz)
-        elif isinstance(current_lastmod_val, str):
+        elif isinstance(current_lastmod_val, date): # Handle date objects (from YYYY-MM-DD)
+             logger.info(f"Frontmatter provided lastmod date object: {current_lastmod_val}. Converting to datetime.")
+             # Combine date with midnight time and add default timezone
+             final_lastmod_dt = datetime.combine(current_lastmod_val, datetime.min.time()).replace(tzinfo=self.tokyo_tz)
+        elif isinstance(current_lastmod_val, str): # Handle string values
             try:
                 # Use dateutil.parser.parse for flexible parsing after stripping whitespace
                 lastmod_str_stripped = current_lastmod_val.strip()
