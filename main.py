@@ -8,6 +8,8 @@ modification times for caching and runs processing tasks in parallel.
 
 import base64
 import concurrent.futures
+import base64
+import concurrent.futures
 import io
 import json
 import logging # Use logging module
@@ -19,6 +21,10 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple, Callable, Literal
+
+# Third-party imports for date parsing
+from dateutil import parser as dateutil_parser
+from dateutil.tz import tzutc # Import tzutc for timezone handling
 
 # Third-party imports
 import frontmatter
@@ -405,13 +411,20 @@ class MarkdownProcessor:
         return content
 
     def _parse_iso_datetime(self, iso_str: Optional[str]) -> Optional[datetime]:
-        """Safely parses an ISO 8601 string into a timezone-aware datetime object."""
+        """Safely parses an ISO 8601 string (typically from Drive API)
+           into a timezone-aware datetime object in the target timezone."""
         if not iso_str: return None
         try:
-            dt_utc = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
-            return dt_utc.astimezone(self.tokyo_tz)
-        except (ValueError, TypeError):
-            logger.warning(f"Could not parse datetime string '{iso_str}'")
+            # Use dateutil parser for flexibility, handles 'Z' automatically
+            dt_parsed = dateutil_parser.isoparse(iso_str)
+            # If naive after parsing ISO string, assume UTC as per ISO 8601
+            if dt_parsed.tzinfo is None or dt_parsed.tzinfo.utcoffset(dt_parsed) is None:
+                 logger.warning(f"Parsed ISO datetime '{iso_str}' is naive. Assuming UTC.")
+                 dt_parsed = dt_parsed.replace(tzinfo=tzutc())
+            # Convert to the target timezone
+            return dt_parsed.astimezone(self.tokyo_tz)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Could not parse ISO datetime string '{iso_str}' using dateutil.isoparse: {e}")
             return None
 
     def _format_datetime(self, dt_obj: Optional[datetime]) -> Optional[str]:
@@ -447,41 +460,92 @@ class MarkdownProcessor:
         drive_created_str = drive_metadata.get('createdTime')
         drive_modified_str = drive_metadata.get('modifiedTime')
 
-        # Determine 'date'
+        # Determine 'date' using dateutil.parser for flexibility
         current_date_val = post.get('date')
         final_date_dt: Optional[datetime] = None
         if isinstance(current_date_val, datetime):
-            final_date_dt = current_date_val
+            final_date_dt = current_date_val # Keep existing datetime object
+            if final_date_dt.tzinfo is None: # Ensure timezone awareness
+                 logger.warning(f"Existing date '{current_date_val}' is naive. "
+                                f"Assigning default timezone {DEFAULT_TIMEZONE}.")
+                 final_date_dt = final_date_dt.replace(tzinfo=self.tokyo_tz)
+            else: # Convert to target timezone if different
+                 final_date_dt = final_date_dt.astimezone(self.tokyo_tz)
         elif isinstance(current_date_val, str):
             try:
-                final_date_dt = datetime.fromisoformat(current_date_val)
-            except ValueError:
-                logger.warning(f"Could not parse existing date '{current_date_val}'.")
-                final_date_dt = self._parse_iso_datetime(drive_created_str)
-        else:
-            final_date_dt = self._parse_iso_datetime(drive_created_str)
-        if not isinstance(final_date_dt, datetime):
-            logger.warning(f"Setting date to current time for '{file_name}'.")
-            final_date_dt = datetime.now(self.tokyo_tz)
-        post.metadata['date'] = final_date_dt
+                # Use dateutil.parser.parse for flexible parsing
+                logger.info(f"Attempting to parse date string '{current_date_val}' using dateutil.")
+                # default=datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                # can be used if only date is provided, but let's handle timezone explicitly
+                dt_parsed = dateutil_parser.parse(current_date_val)
 
-        # Determine 'lastmod'
+                # Handle timezone: if naive, assume default; if aware, convert
+                if dt_parsed.tzinfo is None or dt_parsed.tzinfo.utcoffset(dt_parsed) is None:
+                    logger.warning(f"Parsed date '{current_date_val}' is naive. "
+                                   f"Assigning default timezone {DEFAULT_TIMEZONE}.")
+                    final_date_dt = dt_parsed.replace(tzinfo=self.tokyo_tz)
+                else:
+                    logger.info(f"Parsed date '{current_date_val}' has timezone. Converting to {DEFAULT_TIMEZONE}.")
+                    final_date_dt = dt_parsed.astimezone(self.tokyo_tz)
+
+            except (ValueError, OverflowError, TypeError) as parse_err:
+                logger.warning(f"Could not parse existing date string '{current_date_val}' "
+                               f"using dateutil: {parse_err}. Falling back to Drive createdTime.")
+                final_date_dt = self._parse_iso_datetime(drive_created_str)
+        else: # Not datetime or string, use Drive time
+            final_date_dt = self._parse_iso_datetime(drive_created_str)
+
+        # Fallback if date is still None after all attempts
+        if not isinstance(final_date_dt, datetime):
+            logger.warning(f"Setting date to current time for '{file_name}' "
+                           f"(could not determine from frontmatter or Drive).")
+            final_date_dt = datetime.now(self.tokyo_tz)
+        post.metadata['date'] = final_date_dt # Store as datetime object for now
+
+        # Determine 'lastmod' (similar logic to date, using modifiedTime as fallback)
         current_lastmod_val = post.get('lastmod')
         final_lastmod_dt: Optional[datetime] = None
         if isinstance(current_lastmod_val, datetime):
-            final_lastmod_dt = current_lastmod_val
+            final_lastmod_dt = current_lastmod_val # Keep existing datetime object
+            if final_lastmod_dt.tzinfo is None: # Ensure timezone awareness
+                 logger.warning(f"Existing lastmod '{current_lastmod_val}' is naive. "
+                                f"Assigning default timezone {DEFAULT_TIMEZONE}.")
+                 final_lastmod_dt = final_lastmod_dt.replace(tzinfo=self.tokyo_tz)
+            else: # Convert to target timezone if different
+                 final_lastmod_dt = final_lastmod_dt.astimezone(self.tokyo_tz)
         elif isinstance(current_lastmod_val, str):
             try:
-                final_lastmod_dt = datetime.fromisoformat(current_lastmod_val)
-            except ValueError:
-                logger.warning(f"Could not parse existing lastmod '{current_lastmod_val}'.")
+                # Use dateutil.parser.parse for flexible parsing
+                logger.info(f"Attempting to parse lastmod string '{current_lastmod_val}' using dateutil.")
+                dt_parsed = dateutil_parser.parse(current_lastmod_val)
+
+                # Handle timezone: if naive, assume default; if aware, convert
+                if dt_parsed.tzinfo is None or dt_parsed.tzinfo.utcoffset(dt_parsed) is None:
+                    logger.warning(f"Parsed lastmod '{current_lastmod_val}' is naive. "
+                                   f"Assigning default timezone {DEFAULT_TIMEZONE}.")
+                    final_lastmod_dt = dt_parsed.replace(tzinfo=self.tokyo_tz)
+                else:
+                    logger.info(f"Parsed lastmod '{current_lastmod_val}' has timezone. Converting to {DEFAULT_TIMEZONE}.")
+                    final_lastmod_dt = dt_parsed.astimezone(self.tokyo_tz)
+
+            except (ValueError, OverflowError, TypeError) as parse_err:
+                logger.warning(f"Could not parse existing lastmod string '{current_lastmod_val}' "
+                               f"using dateutil: {parse_err}. Falling back to Drive modifiedTime.")
                 final_lastmod_dt = self._parse_iso_datetime(drive_modified_str)
-        else:
+        else: # Not datetime or string, use Drive time
             final_lastmod_dt = self._parse_iso_datetime(drive_modified_str)
+
+        # Fallback if lastmod is still None after all attempts
         if not isinstance(final_lastmod_dt, datetime):
-            logger.warning(f"Setting lastmod to date for '{file_name}'.")
-            final_lastmod_dt = final_date_dt
-        post.metadata['lastmod'] = final_lastmod_dt
+            logger.warning(f"Setting lastmod to final date value for '{file_name}' "
+                           f"(could not determine from frontmatter or Drive).")
+            # Use the determined date as fallback, ensuring it's a datetime
+            if isinstance(final_date_dt, datetime):
+                final_lastmod_dt = final_date_dt
+            else: # Should not happen due to date fallback, but safety check
+                logger.error(f"Cannot set lastmod fallback for {file_name} as date is not valid.")
+                final_lastmod_dt = datetime.now(self.tokyo_tz) # Ultimate fallback
+        post.metadata['lastmod'] = final_lastmod_dt # Store as datetime object for now
 
         # Set other metadata
         if not post.get('title'): post.metadata['title'] = file_name
