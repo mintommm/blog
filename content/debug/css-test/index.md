@@ -2,7 +2,7 @@
 draft: true
 slug: "css-test"
 title: "xxx"
-description: ""
+description: "description"
 tags: ["","",""]
 # showtoc: false
 # cover:
@@ -57,14 +57,14 @@ This is `inline`.
 > This is Blockquotes
 
 #### Links（参照）
-[Googld](https://google.com/)
+[Google](https://google.com/)
 
 #### Images（画像）
 ![sample](/img/sample/sample.png)
 
 #### Tables（表）
-| id     | name    | date       |
-| ------ | ------- | ---------- |
-| 1      | test    | 2019-01-01 |
-| 2      | test    | 2019-01-02 |
-| 3      | test    | 2019-01-03 |
+| id  | name | date       |
+| --- | ---- | ---------- |
+| 1   | test | 2019-01-01 |
+| 2   | test | 2019-01-02 |
+| 3   | test | 2019-01-03 |

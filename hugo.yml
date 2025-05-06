@@ -80,6 +80,7 @@ params:
 permalinks:
   /: /:slug
   posts: /blog/:slug
+  debug: /blog/debug-:slug
 
 taxonomies:
   tag: tags
