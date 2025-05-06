@@ -14,7 +14,7 @@ GitHub Actions を利用して定期的に Google Drive をチェックし、変
 *   Google Drive の更新に基づいた差分更新（キャッシュ利用）
 *   Google Drive 側でのファイル削除・移動の自動反映（ローカルファイルの削除）
 *   GitHub Actions による定期実行・手動実行
-*   **Direct Workload Identity Federation** による Google Cloud 認証
+*   **Workload Identity Federation (`google-github-actions/auth`)** による Google Cloud 認証
 *   コンテンツに変更があった場合のみ Cloudflare Pages へデプロイ（**条件付きデプロイ**）
 
 ## このリポジトリの転用について (Forking and Usage Notes)
@@ -23,11 +23,11 @@ GitHub Actions を利用して定期的に Google Drive をチェックし、変
 
 1.  **Google Cloud Platform (GCP) 設定:**
     *   ご自身の GCP プロジェクトで Google Drive API を有効にする必要があります。
-    *   Workload Identity Federation を設定し、ご自身の GitHub リポジトリが Google Cloud にアクセスできるように設定する必要があります。**Direct Workload Identity Federation** を使用するため、サービスアカウントの権限借用ではなく、直接アクセストークンを取得します。詳細は Appendix の「セットアップと設定」を参照してください。
+    *   Workload Identity Federation を設定し、ご自身の GitHub リポジトリが Google Cloud にアクセスできるように設定する必要があります。GitHub Actions ワークフローでは `google-github-actions/auth` アクションを使用し、サービスアカウント経由で認証を行います。詳細は Appendix の「セットアップと設定」を参照してください。
 2.  **GitHub Secrets の設定:**
-    *   リポジトリ設定で、GCP Workload Identity プロバイダー名、Google Drive の対象フォルダ ID、Cloudflare の認証情報などを Secrets として設定する必要があります。必要な Secrets のリストは Appendix を参照してください (`GCP_SERVICE_ACCOUNT` は通常不要です)。
+    *   リポジトリ設定で、GCP Workload Identity プロバイダー名、サービスアカウントメールアドレス、Google Drive の対象フォルダ ID、Cloudflare の認証情報などを Secrets として設定する必要があります。必要な Secrets のリストは Appendix を参照してください。
 3.  **`main.py` のカスタマイズ:**
-    *   **出力ディレクトリ:** デフォルトでは `content/google-drive` に Markdown ファイルが出力されます。ご自身の Hugo プロジェクトの構成に合わせて `OUTPUT_SUBDIR` 定数を変更してください。
+    *   **出力ディレクトリ:** デフォルトでは `content/posts/google-drive` に Markdown ファイルが出力されます。ご自身の Hugo プロジェクトの構成に合わせて `OUTPUT_SUBDIR` 定数を変更してください。
     *   **フロントマター:** `MarkdownProcessor.process_content` メソッド内でフロントマターを設定しています。必要に応じて、追加のフィールド設定や既存フィールドのロジックを変更してください。
     *   **画像処理:** 画像の幅 (`IMAGE_WIDTH`)、品質 (`IMAGE_QUALITY`)、形式 (`IMAGE_FORMAT`) はスクリプト冒頭の定数で変更可能です。
 4.  **GitHub Actions ワークフローのカスタマイズ:**
@@ -47,7 +47,7 @@ Google Drive からコンテンツを取得し、Hugo 用に処理するコア�
 
 *   **役割:** Google Drive API と連携し、指定されたフォルダ内の Google ドキュメントを処理します。
 *   **主な機能:**
-    *   **認証:** Google Cloud への認証。GitHub Actions ワークフローから渡される **Direct Workload Identity Federation** 経由で取得したアクセストークン (`GOOGLE_OAUTH_ACCESS_TOKEN` 環境変数) を使用します。
+    *   **認証:** Google Cloud への認証。`google.auth.default()` を使用し、GitHub Actions ワークフローで `google-github-actions/auth` によって設定された認証情報（通常は `GOOGLE_APPLICATION_CREDENTIALS` 環境変数経由）を利用します。
     *   **ファイルリスト取得:** 指定された Google Drive フォルダ内の Google ドキュメントを再帰的に検索します。
     *   **ダウンロード:** Google ドキュメントを Markdown 形式 (`text/markdown`) でエクスポート（ダウンロード）します。
     *   **フロントマター処理:** ダウンロードした Markdown にフロントマターを追加・更新します。
@@ -92,7 +92,8 @@ Google Drive からコンテンツを取得し、Hugo 用に処理するコア�
     11. **Build Hugo site:** `hugo` コマンドでサイトをビルドします。`--minify` オプション付きです。
     12. **Deploy to Cloudflare Pages:** **`.content-updated` が存在するか、`ignore_cache` が `true` の場合のみ**、ビルドされたサイト (`public` ディレクトリ) を Cloudflare Pages にデプロイします (`cloudflare/pages-action@v1`)。
 *   **必要な Secrets:** ワークフローが Google Cloud や Cloudflare と連携するために、以下の GitHub Secrets の設定が必要です。
-    *   `GCP_WORKLOAD_IDENTITY_PROVIDER`: Google Cloud Workload Identity プールの **プロバイダーリソース名** (例: `projects/123.../providers/my-provider`)。
+    *   `GCP_WORKLOAD_IDENTITY_PROVIDER`: Google Cloud Workload Identity プールの **プロバイダーリソース名** (例: `projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider`)。
+    *   `GCP_SERVICE_ACCOUNT`: Google Cloud サービスアカウントのメールアドレス (例: `my-service-account@my-project.iam.gserviceaccount.com`)。`google-github-actions/auth` が使用します。
     *   `GOOGLE_DRIVE_PARENT_ID`: コンテンツを取得する Google Drive の親フォルダ ID。
     *   `CLOUDFLARE_API_TOKEN`: Cloudflare API トークン。
     *   `CLOUDFLARE_ACCOUNT_ID`: Cloudflare アカウント ID。
@@ -108,18 +109,21 @@ Google Drive からコンテンツを取得し、Hugo 用に処理するコア�
 4.  **Workload Identity Federation の設定:**
     *   Workload Identity プールを作成します。
     *   GitHub Actions と連携するためのプロバイダーを設定します（リポジトリを指定）。
-    *   **Direct Workload Identity Federation** を使用するため、GitHub Actions が発行した OIDC トークンを直接 Google Cloud アクセストークンに交換できるように設定します。この際、サービスアカウントへの権限借用 (impersonation) ではなく、STS トークン交換 API を利用します。アクセス権限は、Workload Identity プール/プロバイダーに紐付けられたプリンシパル（例: `principal://iam.googleapis.com/projects/<project-number>/locations/global/workloadIdentityPools/<pool-id>/subject/<repo:owner/repo:ref:ref_name>`）に対して直接、またはグループ経由で付与します。Google Drive API への読み取り権限が必要です。
+    *   Workload Identity プールを作成します。
+    *   GitHub Actions と連携するためのプロバイダーを設定します（リポジトリを指定）。
+    *   作成したサービスアカウントが、Workload Identity プールを通じて GitHub Actions からの認証を受け入れられるように、サービスアカウントに Workload Identity ユーザーロール (`roles/iam.workloadIdentityUser`) を付与します。
+    *   GitHub Actions ワークフロー (`google-github-actions/auth`) は、GitHub OIDC トークンを使用して Google Cloud に認証し、指定されたサービスアカウントの権限を借用 (impersonate) して、短期的な認証情報を取得します。
 
 #### A.2.2. GitHub Secrets の設定
 
 リポジトリの `Settings` > `Secrets and variables` > `Actions` で、以下の Secrets を設定します。
 
 *   `GCP_WORKLOAD_IDENTITY_PROVIDER`: Google Cloud Workload Identity プールの **プロバイダーリソース名** (例: `projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider`)。
+*   `GCP_SERVICE_ACCOUNT`: Google Cloud サービスアカウントのメールアドレス (例: `my-service-account@my-project.iam.gserviceaccount.com`)。
 *   `GOOGLE_DRIVE_PARENT_ID`: (例: `1qFJo01Q8gjXnMH1DcLWFQ_ELc9wrtFUP`)
 *   `CLOUDFLARE_API_TOKEN`: Cloudflare API トークン。
 *   `CLOUDFLARE_ACCOUNT_ID`: Cloudflare アカウント ID。
 *   `CLOUDFLARE_PROJECT_NAME`: Cloudflare Pages プロジェクト名。
-*   (注: `GCP_SERVICE_ACCOUNT` は Direct WIF では通常不要です。)
 
 #### A.2.3. Python 環境
 
