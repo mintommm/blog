@@ -1,0 +1,41 @@
+# https://developers.cloudflare.com/pages/platform/known-issues/#delete-a-project-with-a-high-number-of-deployments
+# https://github.com/cloudflare/cloudflare-docs/blob/production/src/content/docs/pages/platform/known-issues.mdx
+
+name: Cleanup Old Cloudflare Deployments
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+jobs:
+  cleanup_deployments:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Run Cloudflare deployment cleanup
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_PAGES_PROJECT_NAME: ${{ secrets.CLOUDFLARE_PROJECT_NAME }}
+          CF_DELETE_ALIASED_DEPLOYMENTS: "true"
+        run: |
+          echo "Starting Cloudflare deployment cleanup..."
+          echo "Downloading the Cloudflare deployment deletion tool..."
+          curl -L -o delete-all-deployments.zip https://pub-505c82ba1c844ba788b97b1ed9415e75.r2.dev/delete-all-deployments.zip
+
+          echo "Extracting the tool..."
+          unzip delete-all-deployments.zip -d ./cf-deployment-deleter
+
+          echo "Navigating to the tool directory..."
+          cd ./cf-deployment-deleter/delete-all-deployments
+
+          echo "Installing dependencies..."
+          npm install
+
+          echo "Running the deployment deletion script..."
+          npm start
