@@ -217,20 +217,21 @@ class GoogleDriveClient:
                 for item in items:
                     mime_type = item.get('mimeType')
                     item_id = item.get('id')
-                    item_name = item.get('name', f"Unnamed Item (ID: {item_id})")
+                    item_name = item.get('name', f"Unnamed Item (ID: {item_id})") # Keep item_name for potential internal use, but don't log it directly
 
                     if mime_type == MIME_TYPE_FOLDER:
-                        logger.info(f'Scanning subfolder: {item_name} ({item_id})')
+                        logger.info(f'Scanning subfolder with ID: {item_id}')
                         if item_id:
                             try:
                                 # Recursive call uses the same client instance
                                 all_files.extend(self.list_google_docs(item_id))
                             except Exception as sub_error:
                                 logger.error(
-                                    f'Error scanning subfolder {item_name}: '
+                                    f"Error scanning subfolder with ID {item_id}: "
                                     f'{sub_error}. Skipping folder.'
                                 )
                         else:
+                            # item_name is still useful here for context if ID is missing
                             logger.warning(f"Folder '{item_name}' has no ID. Skipping.")
 
                     elif mime_type == MIME_TYPE_DOCUMENT:
@@ -256,10 +257,10 @@ class GoogleDriveClient:
         )
         return all_files
 
-    def download_markdown(self, file_id: str, file_name: str) -> Optional[str]:
+    def download_markdown(self, file_id: str, file_name: str) -> Optional[str]: # file_name param retained for context if needed, but not logged directly
         """Downloads a Google Doc as Markdown, handling retries."""
         # Uses self.service which is built with requestBuilder
-        logger.info(f'Attempting download: {file_name} ({file_id})')
+        logger.info(f'Attempting download for file ID: {file_id}')
         if not self.service:
             logger.error('Drive service not initialized for download.')
             return None
@@ -283,13 +284,12 @@ class GoogleDriveClient:
                 return fh
 
             downloaded_fh = self._execute_with_retry(_download_all_chunks)
-            logger.info(f'Successfully downloaded: {file_name}')
+            logger.info(f'Successfully downloaded file ID: {file_id}')
             return downloaded_fh.getvalue().decode('utf-8')
 
         except (HttpError, Exception) as error:
             logger.error(
-                f'Failed to download {file_name} (ID: {file_id}) after '
-                f'retries: {error}'
+                f'Failed to download file ID: {file_id} after retries: {error}'
             )
             return None
 
@@ -457,14 +457,14 @@ class MarkdownProcessor:
         self, md_content: str, drive_metadata: DriveMetadata
     ) -> Optional[str]:
         """Parses content, updates frontmatter, converts images."""
-        file_name = drive_metadata.get('name', 'Unknown File')
+        file_name = drive_metadata.get('name', 'Unknown File') # Retain for internal logic, not direct logging
         file_id = drive_metadata.get('id', 'Unknown ID')
 
         try:
             post = frontmatter.loads(md_content)
         except Exception as parse_error:
             logger.critical(
-                f"Failed to parse frontmatter for '{file_name}' ({file_id}). "
+                f"Failed to parse frontmatter for file ID '{file_id}'. "
                 f'Skipping modification. Error: {parse_error}'
             )
             return None
@@ -514,7 +514,7 @@ class MarkdownProcessor:
 
         # Fallback if date is still None after all attempts
         if not isinstance(final_date_dt, datetime):
-            logger.warning(f"Setting date to current time for '{file_name}' "
+            logger.warning(f"Setting date to current time for file ID '{file_id}' "
                            f"(could not determine from frontmatter or Drive).")
             final_date_dt = datetime.now(self.tokyo_tz)
         post.metadata['date'] = final_date_dt # Store as datetime object for now
@@ -559,13 +559,13 @@ class MarkdownProcessor:
 
         # Fallback if lastmod is still None after all attempts
         if not isinstance(final_lastmod_dt, datetime):
-            logger.warning(f"Setting lastmod to final date value for '{file_name}' "
+            logger.warning(f"Setting lastmod to final date value for file ID '{file_id}' "
                            f"(could not determine from frontmatter or Drive).")
             # Use the determined date as fallback, ensuring it's a datetime
             if isinstance(final_date_dt, datetime):
                 final_lastmod_dt = final_date_dt
             else: # Should not happen due to date fallback, but safety check
-                logger.error(f"Cannot set lastmod fallback for {file_name} as date is not valid.")
+                logger.error(f"Cannot set lastmod fallback for file ID {file_id} as date is not valid.")
                 final_lastmod_dt = datetime.now(self.tokyo_tz) # Ultimate fallback
         post.metadata['lastmod'] = final_lastmod_dt # Store as datetime object for now
 
@@ -581,7 +581,7 @@ class MarkdownProcessor:
         try:
             post.content = self._process_images(post.content)
         except Exception as img_err:
-            logger.exception(f"Error during image processing for '{file_name}'")
+            logger.exception(f"Error during image processing for file ID '{file_id}'")
             post.metadata['conversion_error'] = f'Image processing error: {img_err}'
 
         # Format dates and dump
@@ -619,7 +619,7 @@ class MarkdownProcessor:
             return dumped_content
         except Exception as dump_error:
             logger.critical(
-                f"[{file_id}] Failed to dump final frontmatter for '{file_name}'. Error: {dump_error}"
+                f"[{file_id}] Failed to dump final frontmatter for file ID '{file_id}'. Error: {dump_error}"
             )
             error_content = (
                 f"---\n"
@@ -653,14 +653,15 @@ def process_single_file_task(
 ) -> ProcessStatus:
     """Wrapper function executed by each process in a ProcessPoolExecutor."""
     file_id = drive_metadata.get('id')
-    file_name = drive_metadata.get('name', f"ID: {file_id or 'Unknown'}")
+    # file_name is not directly logged, but can be useful for debugging if needed locally
+    # file_name = drive_metadata.get('name', f"ID: {file_id or 'Unknown'}")
     drive_modified_time = drive_metadata.get('modifiedTime')
 
     if not file_id:
         logger.error("File metadata missing 'id'. Cannot process.")
         return 'process_error'
 
-    logger.info(f'Starting processing for: {file_name} ({file_id})')
+    logger.info(f'Starting processing for file ID: {file_id}')
 
     # Each process needs its own client and processor instances
     try:
@@ -669,7 +670,8 @@ def process_single_file_task(
         # its own service object using the requestBuilder, ensuring safety.
         client = GoogleDriveClient()
     except Exception as init_error:
-        logger.exception(f'Error initializing client/processor for {file_name}')
+        # file_name could be logged here if absolutely necessary for debugging init errors
+        logger.exception(f'Error initializing client/processor for file ID {file_id}')
         return 'init_error'
 
     try:
@@ -677,7 +679,9 @@ def process_single_file_task(
             return 'skipped'
 
         # Use the client instance created within this process
-        md_content = client.download_markdown(file_id, file_name)
+        # Pass file_name for potential internal use in download_markdown, though it won't be logged directly by it
+        file_name_for_download = drive_metadata.get('name', f"ID: {file_id or 'Unknown'}")
+        md_content = client.download_markdown(file_id, file_name_for_download)
         if md_content is None: return 'download_error'
 
         processed_content = processor.process_content(md_content, drive_metadata)
@@ -689,7 +693,7 @@ def process_single_file_task(
             return 'save_error'
 
     except Exception as e:
-        logger.exception(f'Unexpected error during task execution for {file_name}')
+        logger.exception(f'Unexpected error during task execution for file ID {file_id}')
         return 'unknown_error'
 
 
@@ -767,7 +771,8 @@ def main() -> None:
         for future in concurrent.futures.as_completed(future_to_file):
             file_meta = future_to_file[future]
             file_id = file_meta.get('id', 'Unknown ID')
-            file_name = file_meta.get('name', f'ID: {file_id}')
+            # file_name is not logged here directly to avoid exposing it in summary logs
+            # file_name = file_meta.get('name', f'ID: {file_id}')
             try:
                 status: ProcessStatus = future.result()
                 if status == 'success': results['success'] += 1
@@ -775,13 +780,13 @@ def main() -> None:
                 else:
                     results['failed'] += 1
                     logger.error(
-                        f"Processing failed for '{file_name}' ({file_id}) "
+                        f"Processing failed for file ID '{file_id}' "
                         f'with status: {status}'
                     )
             except Exception as exc:
                 results['failed'] += 1
                 logger.exception(
-                    f"'{file_name}' ({file_id}) generated an unexpected "
+                    f"File ID '{file_id}' generated an unexpected "
                     f'exception during execution'
                 )
 
