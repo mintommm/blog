@@ -68,26 +68,46 @@ Google Drive からコンテンツを取得し、Hugo 用に処理するコア�
     *   `GoogleDriveClient`: Google Drive API との通信（認証、リスト、ダウンロード、リトライ）を担当。
     *   `MarkdownProcessor`: Markdown ファイルの処理（キャッシュチェック、フロントマター、画像変換、保存）を担当。
 *   **依存関係:** `pyproject.toml` を参照してください。主なライブラリは `google-api-python-client`, `google-auth-httplib2`, `python-frontmatter`, `Pillow`, `pillow-avif-plugin` です。
-*   **設定:** スクリプト冒頭の定数 (`MAX_RETRIES`, `OUTPUT_SUBDIR` など) や、環境変数 `GOOGLE_DRIVE_PARENT_ID` で動作を制御します。
+    *   **設定:** スクリプト冒頭の定数 (`MAX_RETRIES`, `OUTPUT_SUBDIR` など) や、環境変数 `GOOGLE_DRIVE_PARENT_ID` で動作を制御します。
 
 #### A.1.2. `.github/workflows/google-drive-access.yml`
 
 コンテンツ取得から Hugo ビルド、デプロイまでの一連のプロセスを自動化する GitHub Actions ワークフローです。
 
+#### A.1.3. `.github/workflows/cloudflare-cleanup.yml`
+
+Cloudflare Pages の古いデプロイメントを定期的にクリーンアップする GitHub Actions ワークフローです。
+
+*   **目的:** Cloudflare Pages のプロジェクトで時間の経過とともに蓄積される古い（エイリアス化されていない）デプロイメントを削除し、デプロイメント数の上限に関する問題を回避します。
+*   **トリガー:**
+    *   `schedule`: cron 形式で定期実行（デフォルトでは毎週日曜日の0時 UTC）。
+    *   `workflow_dispatch`: GitHub UI から手動で実行可能。
+*   **主要ステップ:**
+    1.  **Set up Node.js:** Node.js 環境をセットアップします。
+    2.  **Run Cloudflare deployment cleanup:**
+        *   Cloudflare が提供するデプロイメント削除ツールをダウンロードし展開します。
+        *   ツールの依存関係をインストールします (`npm install`)。
+        *   デプロイメント削除スクリプトを実行します (`npm start`)。
+*   **必要な Secrets:**
+    *   `CLOUDFLARE_API_TOKEN`: Cloudflare API トークン。
+    *   `CLOUDFLARE_ACCOUNT_ID`: Cloudflare アカウント ID。
+    *   `CLOUDFLARE_PROJECT_NAME`: Cloudflare Pages のプロジェクト名。
+    *   `CF_DELETE_ALIASED_DEPLOYMENTS`: (オプション) `true` に設定すると、エイリアス化されたデプロイメントも削除対象に含めます。デフォルトでは `false` (エイリアス化されていないもののみ削除)。
+
 *   **目的:** 定期的（スケジュール実行）または手動でトリガーされ、`main.py` を実行してコンテンツを更新し、Hugo サイトをビルドして Cloudflare Pages にデプロイします。
 *   **トリガー:**
-    *   `schedule`: cron 形式で定期実行（デフォルトでは6時間ごと）。
+    *   `schedule`: cron 形式で定期実行（デフォルトでは毎時）。
     *   `workflow_dispatch`: GitHub UI から手動で実行可能。キャッシュを無視するオプション (`ignore_cache`) 付き。
 *   **主要ステップ:**
     1.  **Checkout code:** リポジトリのコードをチェックアウトします (`actions/checkout@v4`)。サブモジュールも取得します。
-    2.  **Authenticate to Google Cloud (Direct WIF):** GitHub OIDC トークンを取得し、Google STS API を呼び出して Google Cloud アクセストークンを取得します。`google-github-actions/auth` は使用しません。
+    2.  **Authenticate to Google Cloud:** `google-github-actions/auth` アクションを使用し、Workload Identity Federation を介して Google Cloud に認証します。
     3.  **Set up Python:** `.python-version` ファイルに基づいて Python 環境をセットアップします (`actions/setup-python@v5`)。
     4.  **Install uv and dependencies:** `uv` をインストールし、`uv sync` コマンドで `uv.lock` に基づいて Python の依存関係をインストールします。
-    5.  **Restore content cache:** `content` ディレクトリのキャッシュを復元します (`actions/cache@v4`)。手動実行時に `ignore_cache` が `true` の場合はスキップされます。キャッシュキーは OS と `main.py` のハッシュに基づきます。
+    5.  **Restore content cache:** `content/posts/google-drive` ディレクトリのキャッシュを復元します (`actions/cache@v4`)。手動実行時に `ignore_cache` が `true` の場合はスキップされます。キャッシュキーは OS と `main.py` のハッシュに基づきます。
     6.  **Remove old marker file:** 前回のマーカーファイル `.content-updated` を削除します。
-    7.  **Run Python script:** `main.py` を実行します。必要な環境変数 (`GOOGLE_DRIVE_PARENT_ID`, `GOOGLE_OAUTH_ACCESS_TOKEN`) を設定します。コンテンツに変更があれば `main.py` が `.content-updated` を作成します。
+    7.  **Run Python script:** `main.py` を実行します。必要な環境変数 (`GOOGLE_DRIVE_PARENT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`) を設定します。コンテンツに変更があれば `main.py` が `.content-updated` を作成します。
     8.  **Check for content update marker:** `.content-updated` ファイルが存在するかチェックします。
-    9.  **Save content cache:** `main.py` によって更新された `content` ディレクトリをキャッシュに保存します (`actions/cache/save@v4`)。
+    9.  **Save content cache:** `main.py` によって更新された `content/posts/google-drive` ディレクトリをキャッシュに保存します (`actions/cache/save@v4`)。
     10. **Setup Hugo:** Hugo 環境をセットアップします (`peaceiris/actions-hugo@v3`)。
     11. **Build Hugo site:** `hugo` コマンドでサイトをビルドします。`--minify` オプション付きです。
     12. **Deploy to Cloudflare Pages:** **`.content-updated` が存在するか、`ignore_cache` が `true` の場合のみ**、ビルドされたサイト (`public` ディレクトリ) を Cloudflare Pages にデプロイします (`cloudflare/pages-action@v1`)。
@@ -134,7 +154,8 @@ Google Drive からコンテンツを取得し、Hugo 用に処理するコア�
 
 #### A.3.1. 自動実行
 
-*   GitHub Actions ワークフロー (`.github/workflows/google-drive-access.yml`) は、`schedule` トリガーによって定期的に自動実行されます（デフォルトは6時間ごと）。
+*   GitHub Actions ワークフロー (`.github/workflows/google-drive-access.yml`) は、`schedule` トリガーによって定期的に自動実行されます（デフォルトは毎時）。
+*   GitHub Actions ワークフロー (`.github/workflows/cloudflare-cleanup.yml`) は、`schedule` トリガーによって定期的に自動実行されます（デフォルトは毎週日曜日の0時 UTC）。
 
 #### A.3.2. 手動実行
 
