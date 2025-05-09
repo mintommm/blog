@@ -317,8 +317,11 @@ class MarkdownProcessor:
     ) -> bool:
         """Checks if the local file cache is up-to-date."""
         local_path = self.get_local_path(file_id)
+        logger.info(f"[{file_id}] check_cache: Local path: {local_path}, Exists: {local_path.exists()}")
+        logger.info(f"[{file_id}] check_cache: Drive modifiedTime (str): '{drive_modified_time_str}' (type: {type(drive_modified_time_str)})")
+
         if not drive_modified_time_str:
-            logger.warning(f'Drive modifiedTime missing for {file_id}. Forcing update.')
+            logger.warning(f'[{file_id}] Drive modifiedTime missing. Forcing update.')
             return False
 
         if local_path.exists():
@@ -326,20 +329,29 @@ class MarkdownProcessor:
                 with open(local_path, 'r', encoding='utf-8') as f:
                     local_post = frontmatter.load(f)
                 local_modified_time_str = local_post.get('modifiedTime')
+                logger.info(f"[{file_id}] check_cache: Local modifiedTime from frontmatter (str): '{local_modified_time_str}' (type: {type(local_modified_time_str)})")
 
-                if (local_modified_time_str and
-                        local_modified_time_str == drive_modified_time_str):
-                    logger.info(f"Skipping '{file_id}': Local 'modifiedTime' matches Drive's.")
+                comparison_result = (local_modified_time_str == drive_modified_time_str)
+                logger.info(f"[{file_id}] check_cache: Comparison (local == drive): {comparison_result}")
+
+                if (local_modified_time_str and comparison_result):
+                    logger.info(f"[{file_id}] Skipping: Local 'modifiedTime' matches Drive's.")
                     return True
                 elif not local_modified_time_str:
                     logger.warning(
-                        f"Local 'modifiedTime' not found in {local_path}. Forcing update."
+                        f"[{file_id}] Local 'modifiedTime' not found in {local_path}. Forcing update."
+                    )
+                else: # Exists but does not match
+                    logger.warning(
+                        f"[{file_id}] Local 'modifiedTime' ('{local_modified_time_str}') does not match Drive's ('{drive_modified_time_str}'). Forcing update."
                     )
             except Exception as e:
                 logger.warning(
-                    f'Error reading or parsing local file {local_path}: {e}. '
+                    f'[{file_id}] Error reading or parsing local file {local_path}: {e}. '
                     f'Forcing update.'
                 )
+        else:
+            logger.info(f"[{file_id}] Local file {local_path} does not exist. Forcing update.")
         return False
 
     def _convert_image(self, base64_img_data: str) -> str:
@@ -561,6 +573,7 @@ class MarkdownProcessor:
         if not post.get('title'): post.metadata['title'] = file_name
         if 'draft' not in post.metadata: post.metadata['draft'] = False
         post.metadata['google_drive_id'] = file_id
+        logger.info(f"[{file_id}] process_content: Setting metadata 'modifiedTime' to Drive's value: '{drive_modified_str}'")
         post.metadata['modifiedTime'] = drive_modified_str
         post.metadata.pop('conversion_error', None) # Clear previous errors
 
@@ -576,10 +589,37 @@ class MarkdownProcessor:
             post.metadata['date'] = self._format_datetime(post.metadata.get('date'))
             post.metadata['lastmod'] = self._format_datetime(post.metadata.get('lastmod'))
             post.metadata = {k: v for k, v in post.metadata.items() if v is not None}
-            return frontmatter.dumps(post)
+
+            # Log the modifiedTime value just before dumping
+            final_modified_time_in_metadata = post.metadata.get('modifiedTime')
+            logger.info(f"[{file_id}] process_content: 'modifiedTime' in metadata before dump: '{final_modified_time_in_metadata}' (type: {type(final_modified_time_in_metadata)})")
+
+            dumped_content = frontmatter.dumps(post)
+
+            # Log the modifiedTime from the dumped string (for verification)
+            try:
+                # Quick check if the dumped string contains the expected modifiedTime
+                # This is a simple check; a more robust check might involve parsing the dumped YAML
+                if isinstance(final_modified_time_in_metadata, str):
+                    expected_fm_line = f"modifiedTime: '{final_modified_time_in_metadata}'" # Note: python-frontmatter might not quote if not needed
+                    expected_fm_line_alt = f"modifiedTime: {final_modified_time_in_metadata}"
+                    if expected_fm_line in dumped_content or expected_fm_line_alt in dumped_content :
+                        logger.info(f"[{file_id}] process_content: Verified 'modifiedTime' seems present as expected in dumped content.")
+                    else:
+                        # Extract the actual modifiedTime line from dumped content for logging
+                        actual_mt_line = "Not found or complex structure"
+                        for line in dumped_content.splitlines():
+                            if line.startswith("modifiedTime:"):
+                                actual_mt_line = line
+                                break
+                        logger.warning(f"[{file_id}] process_content: 'modifiedTime' in dumped content might differ or not be found as simple string. Actual line: '{actual_mt_line}'")
+            except Exception as log_dump_err:
+                logger.warning(f"[{file_id}] process_content: Could not verify 'modifiedTime' in dumped string due to: {log_dump_err}")
+
+            return dumped_content
         except Exception as dump_error:
             logger.critical(
-                f"Failed to dump final frontmatter for '{file_name}'. Error: {dump_error}"
+                f"[{file_id}] Failed to dump final frontmatter for '{file_name}'. Error: {dump_error}"
             )
             error_content = (
                 f"---\n"
