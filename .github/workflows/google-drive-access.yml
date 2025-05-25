@@ -12,22 +12,19 @@ on:
         type: boolean
 
 jobs:
-  build_and_deploy: # ジョブ名を変更
+  build_and_deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: 'write' # main.pyがcontentディレクトリに書き込むため & Cloudflare Pages Actionで必要になる可能性
       id-token: 'write' # Workload Identity Federationに必要
       deployments: 'write' # Cloudflare Pages ActionがGitHub Deploymentを作成するために必要
-    concurrency: # 同時実行制御
+    concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        submodules: true # Hugoテーマがサブモジュールの場合に必要
-        fetch-depth: 0 # Gitの履歴をすべて取得 (Lastmodなどに必要)
 
     - name: Disable quotePath # 非ASCIIファイル名対応
       run: git config core.quotePath false
@@ -104,7 +101,4 @@ jobs:
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        # Wrangler CLI コマンドを直接指定します。
-        # 'public' ディレクトリをデプロイし、プロジェクト名を指定します。
-        # GITHUB_TOKEN は wrangler-action が環境変数から自動的に使用することを期待します。
         command: pages deploy public --project-name=${{ secrets.CLOUDFLARE_PROJECT_NAME }}
