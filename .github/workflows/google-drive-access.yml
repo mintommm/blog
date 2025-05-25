@@ -100,10 +100,11 @@ jobs:
     - name: Deploy to Cloudflare Pages
       # コンテンツが更新されたか、キャッシュ無視の場合のみデプロイ
       if: steps.check_update_marker.outputs.content_was_updated == 'true' || github.event.inputs.ignore_cache == 'true'
-      uses: cloudflare/pages-action@v1
+      uses: cloudflare/wrangler-action@v3
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        projectName: ${{ secrets.CLOUDFLARE_PROJECT_NAME }}
-        directory: public
-        gitHubToken: ${{ secrets.GITHUB_TOKEN }} # Optional: For pull request previews
+        # Wrangler CLI コマンドを直接指定します。
+        # 'public' ディレクトリをデプロイし、プロジェクト名を指定します。
+        # GITHUB_TOKEN は wrangler-action が環境変数から自動的に使用することを期待します。
+        command: pages deploy public --project-name=${{ secrets.CLOUDFLARE_PROJECT_NAME }}
