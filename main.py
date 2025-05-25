@@ -584,6 +584,15 @@ class MarkdownProcessor:
             logger.exception(f"Error during image processing for file ID '{file_id}'")
             post.metadata['conversion_error'] = f'Image processing error: {img_err}'
 
+        # Replace escaped blockquotes at the beginning of lines
+        try:
+            logger.info(f"[{file_id}] Replacing escaped blockquotes '^\\> ' with '> ' at the beginning of lines")
+            post.content = re.sub(r'^\\> ', '> ', post.content, flags=re.MULTILINE)
+        except Exception as e:
+            logger.exception(f"Error replacing escaped blockquotes for file ID '{file_id}': {e}")
+            # Optionally, add a note to metadata if this specific step fails
+            post.metadata['conversion_error'] = post.metadata.get('conversion_error', '') + f'; Blockquote unescaping error: {e}'
+
         # Format dates and dump
         try:
             post.metadata['date'] = self._format_datetime(post.metadata.get('date'))
