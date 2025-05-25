@@ -76,12 +76,12 @@ jobs:
           echo "content_was_updated=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: Save content cache
-      if: github.event.inputs.ignore_cache != 'true'
-      uses: actions/cache/save@v4 # actions/cache@v4 の if 条件で制御
-      with:
-        path: content/posts/google-drive # キャッシュ対象を main.py の出力先に限定
-        key: ${{ runner.os }}-markdown-content-${{ hashFiles('main.py') }} # 保存キーは復元キーと同じにする
+    # - name: Save content cache # 明示的な保存ステップをコメントアウト
+    #   if: github.event.inputs.ignore_cache != 'true'
+    #   uses: actions/cache/save@v4
+    #   with:
+    #     path: content/posts/google-drive
+    #     key: ${{ runner.os }}-markdown-content-${{ hashFiles('main.py') }}
 
     - name: Setup Hugo
       uses: peaceiris/actions-hugo@v3
