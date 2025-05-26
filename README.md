@@ -26,13 +26,13 @@ GitHub Actions を利用して定期的に Google Drive をチェックし、変
     *   Workload Identity Federation を設定し、ご自身の GitHub リポジトリが Google Cloud にアクセスできるように設定する必要があります。GitHub Actions ワークフローでは `google-github-actions/auth` アクションを使用し、サービスアカウント経由で認証を行います。詳細は Appendix の「セットアップと設定」を参照してください。
 2.  **GitHub Secrets の設定:**
     *   リポジトリ設定で、GCP Workload Identity プロバイダー名、サービスアカウントメールアドレス、Google Drive の対象フォルダ ID、Cloudflare の認証情報などを Secrets として設定する必要があります。必要な Secrets のリストは Appendix を参照してください。
-3.  **`main.py` のカスタマイズ:**
+3.  **`gdrive_sync/main.py` のカスタマイズ:**
     *   **出力ディレクトリ:** デフォルトでは `content/posts/google-drive` に Markdown ファイルが出力されます。ご自身の Hugo プロジェクトの構成に合わせて `OUTPUT_SUBDIR` 定数を変更してください。
     *   **フロントマター:** `MarkdownProcessor.process_content` メソッド内でフロントマターを設定しています。必要に応じて、追加のフィールド設定や既存フィールドのロジックを変更してください。
     *   **画像処理:** 画像の幅 (`IMAGE_WIDTH`)、品質 (`IMAGE_QUALITY`)、形式 (`IMAGE_FORMAT`) はスクリプト冒頭の定数で変更可能です。
 4.  **GitHub Actions ワークフローのカスタマイズ:**
     *   `.github/workflows/google-drive-access.yml` ファイル内のトリガー（スケジュール実行の間隔など）や、Hugo のビルドオプション、デプロイ先（Cloudflare Pages 以外を使用する場合）などを適宜変更してください。
-    *   Python のバージョン (`.python-version`) や依存関係 (`pyproject.toml`) を確認してください。
+    *   Python のバージョン (`gdrive_sync/.python-version`) や依存関係 (`gdrive_sync/pyproject.toml`) を確認してください。
 5.  **コンテンツの移行:** 既存の Markdown コンテンツを Google ドキュメントに移行するか、あるいはこのシステムと併用するかを検討してください。このスクリプトは指定された Google Drive フォルダのみを対象とします。
 
 ---
@@ -41,7 +41,7 @@ GitHub Actions を利用して定期的に Google Drive をチェックし、変
 
 ### A.1. 主要コンポーネント
 
-#### A.1.1. `main.py`
+#### A.1.1. `gdrive_sync/main.py`
 
 Google Drive からコンテンツを取得し、Hugo 用に処理するコアスクリプトです。
 
@@ -69,7 +69,7 @@ Google Drive からコンテンツを取得し、Hugo 用に処理するコア�
 *   **クラス構成:**
     *   `GoogleDriveClient`: Google Drive API との通信（認証、リスト、ダウンロード、リトライ）を担当。
     *   `MarkdownProcessor`: Markdown ファイルの処理（キャッシュチェック、フロントマター、画像変換、保存）を担当。
-*   **依存関係:** `pyproject.toml` を参照してください。主なライブラリは `google-api-python-client`, `google-auth-httplib2`, `python-frontmatter`, `Pillow`, `pillow-avif-plugin` です。
+*   **依存関係:** `gdrive_sync/pyproject.toml` を参照してください。主なライブラリは `google-api-python-client`, `google-auth-httplib2`, `python-frontmatter`, `Pillow`, `pillow-avif-plugin` です。
     *   **設定:** スクリプト冒頭の定数 (`MAX_RETRIES`, `OUTPUT_SUBDIR` など) や、環境変数 `GOOGLE_DRIVE_PARENT_ID` で動作を制御します。
 
 #### A.1.2. `.github/workflows/google-drive-access.yml`
@@ -96,23 +96,24 @@ Cloudflare Pages の古いデプロイメントを定期的にクリーンアッ
     *   `CLOUDFLARE_PROJECT_NAME`: Cloudflare Pages のプロジェクト名。
     *   `CF_DELETE_ALIASED_DEPLOYMENTS`: (オプション) `true` に設定すると、エイリアス化されたデプロイメントも削除対象に含めます。デフォルトでは `false` (エイリアス化されていないもののみ削除)。
 
-*   **目的:** 定期的（スケジュール実行）または手動でトリガーされ、`main.py` を実行してコンテンツを更新し、Hugo サイトをビルドして Cloudflare Pages にデプロイします。
+*   **目的:** 定期的（スケジュール実行）または手動でトリガーされ、`gdrive_sync/main.py` を実行してコンテンツを更新し、Hugo サイトをビルドして Cloudflare Pages にデプロイします。
 *   **トリガー:**
     *   `schedule`: cron 形式で定期実行（デフォルトでは毎時）。
     *   `workflow_dispatch`: GitHub UI から手動で実行可能。キャッシュを無視するオプション (`ignore_cache`) 付き。
 *   **主要ステップ:**
     1.  **Checkout code:** リポジトリのコードをチェックアウトします (`actions/checkout@v4`)。サブモジュールも取得します。
     2.  **Authenticate to Google Cloud:** `google-github-actions/auth` アクションを使用し、Workload Identity Federation を介して Google Cloud に認証します。
-    3.  **Set up Python:** `.python-version` ファイルに基づいて Python 環境をセットアップします (`actions/setup-python@v5`)。
-    4.  **Install uv and dependencies:** `uv` をインストールし、`uv sync` コマンドで `uv.lock` に基づいて Python の依存関係をインストールします。
-    5.  **Restore content cache:** `content/posts/google-drive` ディレクトリのキャッシュを復元します (`actions/cache@v4`)。手動実行時に `ignore_cache` が `true` の場合はスキップされます。キャッシュキーは OS と `main.py` のハッシュに基づきます。
-    6.  **Remove old marker file:** 前回のマーカーファイル `.content-updated` を削除します。
-    7.  **Run Python script:** `main.py` を実行します。必要な環境変数 (`GOOGLE_DRIVE_PARENT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`) を設定します。コンテンツに変更があれば `main.py` が `.content-updated` を作成します。
-    8.  **Check for content update marker:** `.content-updated` ファイルが存在するかチェックします。
-    9.  **Save content cache:** `main.py` によって更新された `content/posts/google-drive` ディレクトリをキャッシュに保存します (`actions/cache/save@v4`)。
-    10. **Setup Hugo:** Hugo 環境をセットアップします (`peaceiris/actions-hugo@v3`)。
-    11. **Build Hugo site:** `hugo` コマンドでサイトをビルドします。`--minify` オプション付きです。
-    12. **Deploy to Cloudflare Pages:** `main.py` によって `.content-updated` ファイルが作成された場合（つまり、公開コンテンツの追加・更新・削除があった場合）、または手動実行時に `ignore_cache` が `true` の場合のみ、ビルドされたサイト (`public` ディレクトリ) を Cloudflare Pages にデプロイします (`cloudflare/pages-action@v1`)。
+    3.  **Set up Python:** `gdrive_sync/.python-version` ファイルに基づいて Python 環境をセットアップします (`actions/setup-python@v5`)。
+    4.  **Install uv:** `uv` をインストールします。
+    5.  **Install dependencies with uv:** `uv sync` コマンドで `gdrive_sync/uv.lock` に基づいて Python の依存関係をインストールします (実行は `gdrive_sync` ディレクトリ内で行われます)。
+    6.  **Restore content cache:** `content/posts/google-drive` ディレクトリのキャッシュを復元します (`actions/cache@v4`)。手動実行時に `ignore_cache` が `true` の場合はスキップされます。キャッシュキーは OS と `gdrive_sync/main.py` のハッシュに基づきます。
+    7.  **Remove old marker file:** 前回のマーカーファイル `.content-updated` を削除します。
+    8.  **Run Python script:** `gdrive_sync/main.py` を実行します。必要な環境変数 (`GOOGLE_DRIVE_PARENT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`) を設定します。コンテンツに変更があれば `gdrive_sync/main.py` が `.content-updated` を作成します。
+    9.  **Check for content update marker:** `.content-updated` ファイルが存在するかチェックします。
+    10. **Save content cache:** `gdrive_sync/main.py` によって更新された `content/posts/google-drive` ディレクトリをキャッシュに保存します (`actions/cache/save@v4`)。
+    11. **Setup Hugo:** Hugo 環境をセットアップします (`peaceiris/actions-hugo@v3`)。
+    12. **Build Hugo site:** `hugo` コマンドでサイトをビルドします。`--minify` オプション付きです。
+    13. **Deploy to Cloudflare Pages:** `gdrive_sync/main.py` によって `.content-updated` ファイルが作成された場合（つまり、公開コンテンツの追加・更新・削除があった場合）、または手動実行時に `ignore_cache` が `true` の場合のみ、ビルドされたサイト (`public` ディレクトリ) を Cloudflare Pages にデプロイします (`cloudflare/pages-action@v1`)。
 *   **必要な Secrets:** ワークフローが Google Cloud や Cloudflare と連携するために、以下の GitHub Secrets の設定が必要です。
     *   `GCP_WORKLOAD_IDENTITY_PROVIDER`: Google Cloud Workload Identity プールの **プロバイダーリソース名** (例: `projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider`)。
     *   `GCP_SERVICE_ACCOUNT`: Google Cloud サービスアカウントのメールアドレス (例: `my-service-account@my-project.iam.gserviceaccount.com`)。`google-github-actions/auth` が使用します。
@@ -149,8 +150,8 @@ Cloudflare Pages の古いデプロイメントを定期的にクリーンアッ
 
 #### A.2.3. Python 環境
 
-*   リポジトリには `.python-version` ファイルが含まれており、使用する Python バージョンを指定しています。
-*   依存関係は `pyproject.toml` で定義され、`uv.lock` でバージョンが固定されています。GitHub Actions では `uv sync` でインストールされます。ローカルで開発する場合も同様に `uv sync` を使用してください。
+*   リポジトリの `gdrive_sync/` ディレクトリには `.python-version` ファイルが含まれており、使用する Python バージョンを指定しています。
+*   依存関係は `gdrive_sync/pyproject.toml` で定義され、`gdrive_sync/uv.lock` でバージョンが固定されています。GitHub Actions では `uv sync --cwd gdrive_sync` でインストールされます。ローカルで開発する場合も同様に `cd gdrive_sync && uv sync` を使用してください。
 
 ### A.3. 実行方法
 
@@ -170,7 +171,7 @@ Cloudflare Pages の古いデプロイメントを定期的にクリーンアッ
 
 ### A.4. 依存関係
 
-主要な Python 依存関係は `pyproject.toml` ファイルにリストされています。
+主要な Python 依存関係は `gdrive_sync/pyproject.toml` ファイルにリストされています。
 
 ```toml
 [project]
@@ -187,14 +188,14 @@ dependencies = [
 
 ### A.5. 今後のメンテナンス (LLM エージェント向け)
 
-*   **コード構造:** 主要なロジックは `main.py` 内の `GoogleDriveClient` クラス（API通信）と `MarkdownProcessor` クラス（ファイル処理）に分割されています。`main()` 関数が全体の処理フローを制御します。
+*   **コード構造:** 主要なロジックは `gdrive_sync/main.py` 内の `GoogleDriveClient` クラス（API通信）と `MarkdownProcessor` クラス（ファイル処理）に分割されています。`main()` 関数が全体の処理フローを制御します。
 *   **設定変更:**
-    *   基本的な動作設定（リトライ回数、画像サイズ、出力サブディレクトリ名など）は `main.py` 冒頭の定数を変更します。
+    *   基本的な動作設定（リトライ回数、画像サイズ、出力サブディレクトリ名など）は `gdrive_sync/main.py` 冒頭の定数を変更します。
     *   Google Drive の対象フォルダは GitHub Secret `GOOGLE_DRIVE_PARENT_ID` で設定します。
     *   デプロイ先や認証情報は GitHub Secrets で管理されます。
 *   **エラー発生時の確認ポイント:**
-    *   GitHub Actions の実行ログを確認してください。`main.py` は `logging` モジュールを使用しており、詳細な情報やエラーメッセージが出力されます。
-    *   `main.py` 内の `_execute_with_retry` メソッドは API エラー時のリトライ状況をログ出力します。
+    *   GitHub Actions の実行ログを確認してください。`gdrive_sync/main.py` は `logging` モジュールを使用しており、詳細な情報やエラーメッセージが出力されます。
+    *   `gdrive_sync/main.py` 内の `_execute_with_retry` メソッドは API エラー時のリトライ状況をログ出力します。
     *   ファイル処理に失敗した場合、スクリプトは非ゼロの終了コードで終了し、Actions のステップが失敗します。ログで `Processing failed for ...` や `Exiting with error code 1 ...` といったメッセージを探してください。
     *   キャッシュ関連の問題が疑われる場合は、手動実行時に `ignore_cache` を `true` にして試してください。
 *   **機能追加・変更:**

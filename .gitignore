@@ -1,3 +1,14 @@
 # https://gohugo.io/news/0.89.0-relnotes/#notes
 .hugo_build.lock
 public/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# uv cache
+.uv_cache/
+
+# Python cache in gdrive_sync
+gdrive_sync/__pycache__/
