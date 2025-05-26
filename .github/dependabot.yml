@@ -1,0 +1,17 @@
+version: 2
+updates:
+  # Python dependencies (uv/pip)
+  - package-ecosystem: "pip"
+    directory: "/gdrive_sync" # Location of pyproject.toml and uv.lock
+    schedule:
+      interval: "daily"
+    assignees:
+      - "mintommm"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/" # Location of workflow files
+    schedule:
+      interval: "daily"
+    assignees:
+      - "mintommm"
