@@ -45,9 +45,7 @@ jobs:
       run: python -m pip install --upgrade pip uv
 
     - name: Install dependencies with uv
-      run: |
-        uv pip compile pyproject.toml -o uv.lock
-        uv sync
+      run: uv sync # Assumes uv.lock is present and correct in gdrive_sync/
       working-directory: gdrive_sync
 
     - name: Restore content cache
