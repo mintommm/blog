@@ -31,7 +31,7 @@ GitHub Actions を利用して定期的に Google Drive をチェックし、変
     *   **フロントマター:** `MarkdownProcessor.process_content` メソッド内でフロントマターを設定しています。必要に応じて、追加のフィールド設定や既存フィールドのロジックを変更してください。
     *   **画像処理:** 画像の幅 (`IMAGE_WIDTH`)、品質 (`IMAGE_QUALITY`)、形式 (`IMAGE_FORMAT`) はスクリプト冒頭の定数で変更可能です。
 4.  **GitHub Actions ワークフローのカスタマイズ:**
-    *   `.github/workflows/google-drive-access.yml` ファイル内のトリガー（スケジュール実行の間隔など）や、Hugo のビルドオプション、デプロイ先（Cloudflare Pages 以外を使用する場合）などを適宜変更してください。
+    *   `.github/workflows/main.yml` ファイル内のトリガー（スケジュール実行の間隔など）や、Hugo のビルドオプション、デプロイ先（Cloudflare Pages 以外を使用する場合）などを適宜変更してください。
     *   Python のバージョン (`gdrive_sync/.python-version`) や依存関係 (`gdrive_sync/pyproject.toml`) を確認してください。
 5.  **コンテンツの移行:** 既存の Markdown コンテンツを Google ドキュメントに移行するか、あるいはこのシステムと併用するかを検討してください。このスクリプトは指定された Google Drive フォルダのみを対象とします。
 
@@ -72,7 +72,7 @@ Google Drive からコンテンツを取得し、Hugo 用に処理するコア�
 *   **依存関係:** `gdrive_sync/pyproject.toml` を参照してください。主なライブラリは `google-api-python-client`, `google-auth-httplib2`, `python-frontmatter`, `Pillow`, `pillow-avif-plugin` です。
     *   **設定:** スクリプト冒頭の定数 (`MAX_RETRIES`, `OUTPUT_SUBDIR` など) や、環境変数 `GOOGLE_DRIVE_PARENT_ID` で動作を制御します。
 
-#### A.1.2. `.github/workflows/google-drive-access.yml`
+#### A.1.2. `.github/workflows/main.yml`
 
 コンテンツ取得から Hugo ビルド、デプロイまでの一連のプロセスを自動化する GitHub Actions ワークフローです。
 
@@ -157,7 +157,7 @@ Cloudflare Pages の古いデプロイメントを定期的にクリーンアッ
 
 #### A.3.1. 自動実行
 
-*   GitHub Actions ワークフロー (`.github/workflows/google-drive-access.yml`) は、`schedule` トリガーによって定期的に自動実行されます（デフォルトは毎時）。
+*   GitHub Actions ワークフロー (`.github/workflows/main.yml`) は、`schedule` トリガーによって定期的に自動実行されます（デフォルトは毎時）。
 *   GitHub Actions ワークフロー (`.github/workflows/cloudflare-cleanup.yml`) は、`schedule` トリガーによって定期的に自動実行されます（デフォルトは毎週日曜日の0時 UTC）。
 
 #### A.3.2. 手動実行
@@ -202,4 +202,4 @@ dependencies = [
     *   Google Drive API 関連の変更は `GoogleDriveClient` クラスを修正します。
     *   Markdown の処理（フロントマター、画像変換など）の変更は `MarkdownProcessor` クラスを修正します。
     *   並列処理や全体のフローの変更は `main()` 関数および `process_single_file_task` 関数を修正します。
-    *   ワークフロー自体の変更（トリガー、使用する Action、デプロイ方法など）は `.github/workflows/google-drive-access.yml` を編集します。
+    *   ワークフロー自体の変更（トリガー、使用する Action、デプロイ方法など）は `.github/workflows/main.yml` を編集します。

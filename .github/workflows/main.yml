@@ -1,0 +1,112 @@
+name: Download Content, Build and Deploy
+
+on:
+  schedule:
+    - cron: '0 * * * *' # 毎時0分に定期実行
+  workflow_dispatch:
+    inputs:
+      ignore_cache:
+        description: 'キャッシュを無視してコンテンツを強制的に再ダウンロードしますか？ (true/false)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # main.pyがcontentディレクトリに書き込むため & Cloudflare Pages Actionで必要になる可能性
+      id-token: write # Workload Identity Federationに必要
+      deployments: write # Cloudflare Pages ActionがGitHub Deploymentを作成するために必要
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }} # 同一ワークフロー・ブランチでの同時実行を制限
+      cancel-in-progress: true # 進行中のジョブがある場合、新しいジョブが開始されたらキャンセル
+
+    steps:
+    # リポジトリのコードをチェックアウト
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 非ASCIIファイル名がgit statusなどで正しく表示されるように設定
+    - name: Disable quotePath for non-ASCII filenames
+      run: git config core.quotePath false
+
+    # Google Cloudへの認証 (Workload Identity Federationを使用)
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+    # Python環境のセットアップ (gdrive_sync/.python-version ファイルを参照)
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version-file: gdrive_sync/.python-version
+
+    # Pythonパッケージインストーラー uv のインストール
+    - name: Install uv
+      run: python -m pip install --upgrade pip uv
+
+    # Python依存関係のインストール (uvを使用し、gdrive_sync/pyproject.toml に基づく)
+    - name: Install Python dependencies with uv
+      run: uv pip install . --system # pyproject.toml を元に依存関係をシステムPython環境にインストール
+      working-directory: gdrive_sync # gdrive_sync ディレクトリ内で実行
+
+    # コンテンツキャッシュの復元 (手動実行で ignore_cache が true の場合はスキップ)
+    - name: Restore content cache
+      id: cache-content
+      if: github.event.inputs.ignore_cache != 'true'
+      uses: actions/cache@v4
+      with:
+        path: content/posts/google-drive # キャッシュ対象は main.py の出力先
+        key: ${{ runner.os }}-markdown-content-${{ hashFiles('gdrive_sync/main.py', 'gdrive_sync/pyproject.toml') }}
+        # restore-keys: | # 必要に応じて古いキャッシュキーからの復元も設定可能
+        #   ${{ runner.os }}-markdown-content-
+
+    # 前回の実行で作成された可能性のあるマーカーファイルを削除
+    - name: Remove old marker file (.content-updated)
+      run: rm -f .content-updated
+
+    # Google Driveからコンテンツを取得・処理するPythonスクリプトを実行
+    - name: Run Python script to sync content from Google Drive
+      run: uv run python gdrive_sync/main.py
+      env:
+        GOOGLE_DRIVE_PARENT_ID: ${{ secrets.GOOGLE_DRIVE_PARENT_ID }}
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }} # GCP認証情報
+
+    # Pythonスクリプトによってコンテンツ更新マーカーが作成されたか確認
+    - name: Check for content update marker
+      id: check_update_marker
+      run: |
+        if [ -f ".content-updated" ]; then
+          echo "Content was updated by main.py."
+          echo "content_was_updated=true" >> $GITHUB_OUTPUT
+        else
+          echo "Content was not updated by main.py."
+          echo "content_was_updated=false" >> $GITHUB_OUTPUT
+        fi
+
+    # Hugo環境のセットアップ (拡張版を最新バージョンで)
+    - name: Setup Hugo
+      uses: peaceiris/actions-hugo@v3
+      with:
+        hugo-version: latest
+        extended: true
+
+    # Hugoサイトのビルド (タイムゾーンをAsia/Tokyoに設定し、出力を最小化)
+    - name: Build Hugo site
+      env:
+        TZ: Asia/Tokyo # ビルド時のタイムゾーン指定
+      run: hugo --minify
+
+    # Cloudflare Pagesへのデプロイ
+    # 条件: コンテンツが更新された場合 (マーカーファイルが存在) 、または手動実行でキャッシュを無視した場合
+    - name: Deploy to Cloudflare Pages
+      if: steps.check_update_marker.outputs.content_was_updated == 'true' || github.event.inputs.ignore_cache == 'true'
+      uses: cloudflare/wrangler-action@v3
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        command: pages deploy public --project-name=${{ secrets.CLOUDFLARE_PROJECT_NAME }} --commit-dirty=true
