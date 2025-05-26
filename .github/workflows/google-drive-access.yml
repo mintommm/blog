@@ -45,7 +45,9 @@ jobs:
       run: python -m pip install --upgrade pip uv
 
     - name: Install dependencies with uv
-      run: uv sync # uv.lockに基づいて依存関係をインストール (システムパッケージは参照しない)
+      run: |
+        uv pip compile pyproject.toml -o uv.lock
+        uv sync
       working-directory: gdrive_sync
 
     - name: Restore content cache
