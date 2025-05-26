@@ -15,7 +15,7 @@ GitHub Actions を利用して定期的に Google Drive をチェックし、変
 *   Google Drive 側でのファイル削除・移動の自動反映（ローカルファイルの削除）
 *   GitHub Actions による定期実行・手動実行
 *   **Workload Identity Federation (`google-github-actions/auth`)** による Google Cloud 認証
-*   コンテンツに変更があった場合のみ Cloudflare Pages へデプロイ（**条件付きデプロイ**）
+*   公開コンテンツ（`draft: false` の記事）の追加・更新・削除があった場合のみ Cloudflare Pages へデプロイ（**条件付きデプロイ**）
 
 ## このリポジトリの転用について (Forking and Usage Notes)
 
@@ -58,9 +58,11 @@ Google Drive からコンテンツを取得し、Hugo 用に処理するコア�
         *   `google_drive_id`: 対応する Google Drive ファイル ID を記録。
         *   `modifiedTime`: Drive の `modifiedTime` の生文字列をキャッシュ比較用に記録。
     *   **画像変換:** Markdown 内の Base64 PNG 画像 (`data:image/png;base64,...`) を検出し、AVIF 形式 (`data:image/avif;base64,...`) に変換します（Pillow と pillow-avif-plugin を使用）。画像幅が設定値 (`IMAGE_WIDTH`) を超える場合はリサイズします。
-    *   **キャッシュ管理:** ローカルに保存されている Markdown ファイルの `modifiedTime` フロントマターと、Drive から取得した最新の `modifiedTime` を比較し、変更がない場合はダウンロード・処理をスキップします。
-    *   **ローカルファイル同期:** Drive 上に存在しないファイルに対応するローカル Markdown ファイル (`content/google-drive/{file_id}.md`) を削除します。
-    *   **変更検知マーカー:** ローカルファイルの削除、または Drive からのダウンロード・更新により `content` ディレクトリに変更があった場合にのみ、リポジトリルートに `.content-updated` ファイルを作成します。
+    *   **キャッシュ管理:** ローカルに保存されている Markdown ファイルの `modifiedTime` フロントマターと、Drive から取得した最新の `modifiedTime` を比較し、変更がない場合はダウンロード・処理をスキップします。ファイルの `draft` 状態もキャッシュ比較時に考慮されます。
+    *   **ローカルファイル同期:** Drive 上に存在しないファイルに対応するローカル Markdown ファイル (`content/google-drive/{file_id}.md`) を削除します。削除されるファイルが以前公開状態 (`draft: false`) であったかどうかも記録されます。
+    *   **変更検知マーカー:** 以下のいずれかの条件を満たす場合にのみ、リポジトリルートに `.content-updated` ファイルを作成します。
+        1.  公開状態 (`draft: false`) の記事が新規作成または更新された場合。
+        2.  以前公開状態 (`draft: false`) であった記事が Google Drive から削除された場合。
     *   **並列処理:** 各ファイルのダウンロードと処理を `concurrent.futures.ProcessPoolExecutor` を使用して並列化し、処理時間を短縮します。
     *   **エラーハンドリングとリトライ:** Google Drive API 呼び出し時に一時的なエラーが発生した場合、指数バックオフを用いたリトライ処理を行います。処理中に回復不能なエラーが発生した場合はログに出力し、最終的にエラーがあった場合は非ゼロの終了コードで終了します。
     *   **ロギング:** `logging` モジュールを使用し、処理の進行状況やエラー情報を標準出力に出力します。
@@ -110,7 +112,7 @@ Cloudflare Pages の古いデプロイメントを定期的にクリーンアッ
     9.  **Save content cache:** `main.py` によって更新された `content/posts/google-drive` ディレクトリをキャッシュに保存します (`actions/cache/save@v4`)。
     10. **Setup Hugo:** Hugo 環境をセットアップします (`peaceiris/actions-hugo@v3`)。
     11. **Build Hugo site:** `hugo` コマンドでサイトをビルドします。`--minify` オプション付きです。
-    12. **Deploy to Cloudflare Pages:** **`.content-updated` が存在するか、`ignore_cache` が `true` の場合のみ**、ビルドされたサイト (`public` ディレクトリ) を Cloudflare Pages にデプロイします (`cloudflare/pages-action@v1`)。
+    12. **Deploy to Cloudflare Pages:** `main.py` によって `.content-updated` ファイルが作成された場合（つまり、公開コンテンツの追加・更新・削除があった場合）、または手動実行時に `ignore_cache` が `true` の場合のみ、ビルドされたサイト (`public` ディレクトリ) を Cloudflare Pages にデプロイします (`cloudflare/pages-action@v1`)。
 *   **必要な Secrets:** ワークフローが Google Cloud や Cloudflare と連携するために、以下の GitHub Secrets の設定が必要です。
     *   `GCP_WORKLOAD_IDENTITY_PROVIDER`: Google Cloud Workload Identity プールの **プロバイダーリソース名** (例: `projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider`)。
     *   `GCP_SERVICE_ACCOUNT`: Google Cloud サービスアカウントのメールアドレス (例: `my-service-account@my-project.iam.gserviceaccount.com`)。`google-github-actions/auth` が使用します。
