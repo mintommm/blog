@@ -314,29 +314,37 @@ class MarkdownProcessor:
 
     def check_cache(
         self, file_id: str, drive_modified_time_str: Optional[str]
-    ) -> bool:
-        """Checks if the local file cache is up-to-date."""
+    ) -> Tuple[bool, bool]:
+        """Checks if the local file cache is up-to-date.
+
+        Returns:
+            Tuple[bool, bool]: (should_skip, is_draft_if_skipped)
+                               is_draft_if_skipped is True if the skipped file is a draft,
+                               False otherwise or if not skipped.
+        """
         local_path = self.get_local_path(file_id)
         logger.info(f"[{file_id}] check_cache: Local path: {local_path}, Exists: {local_path.exists()}")
         logger.info(f"[{file_id}] check_cache: Drive modifiedTime (str): '{drive_modified_time_str}' (type: {type(drive_modified_time_str)})")
 
         if not drive_modified_time_str:
             logger.warning(f'[{file_id}] Drive modifiedTime missing. Forcing update.')
-            return False
+            return False, False # Do not skip, is_draft is irrelevant here
 
         if local_path.exists():
             try:
                 with open(local_path, 'r', encoding='utf-8') as f:
                     local_post = frontmatter.load(f)
                 local_modified_time_str = local_post.get('modifiedTime')
+                is_draft = local_post.get('draft', False) # Get draft status
                 logger.info(f"[{file_id}] check_cache: Local modifiedTime from frontmatter (str): '{local_modified_time_str}' (type: {type(local_modified_time_str)})")
+                logger.info(f"[{file_id}] check_cache: Local draft status: {is_draft}")
 
                 comparison_result = (local_modified_time_str == drive_modified_time_str)
                 logger.info(f"[{file_id}] check_cache: Comparison (local == drive): {comparison_result}")
 
                 if (local_modified_time_str and comparison_result):
                     logger.info(f"[{file_id}] Skipping: Local 'modifiedTime' matches Drive's.")
-                    return True
+                    return True, is_draft # Skip, return its draft status
                 elif not local_modified_time_str:
                     logger.warning(
                         f"[{file_id}] Local 'modifiedTime' not found in {local_path}. Forcing update."
@@ -352,7 +360,7 @@ class MarkdownProcessor:
                 )
         else:
             logger.info(f"[{file_id}] Local file {local_path} does not exist. Forcing update.")
-        return False
+        return False, False # Do not skip, is_draft is irrelevant here
 
     def _convert_image(self, base64_img_data: str) -> str:
         """Converts a single base64 PNG image string to the target format (AVIF)."""
@@ -659,51 +667,67 @@ class MarkdownProcessor:
 
 def process_single_file_task(
     drive_metadata: DriveMetadata, output_dir_str: str
-) -> ProcessStatus:
-    """Wrapper function executed by each process in a ProcessPoolExecutor."""
+) -> Tuple[ProcessStatus, bool]:
+    """Wrapper function executed by each process in a ProcessPoolExecutor.
+
+    Returns:
+        Tuple[ProcessStatus, bool]: (status, is_draft)
+                                    is_draft is True if the file is a draft,
+                                    False otherwise. Defaults to True on errors.
+    """
     file_id = drive_metadata.get('id')
-    # file_name is not directly logged, but can be useful for debugging if needed locally
-    # file_name = drive_metadata.get('name', f"ID: {file_id or 'Unknown'}")
     drive_modified_time = drive_metadata.get('modifiedTime')
 
     if not file_id:
         logger.error("File metadata missing 'id'. Cannot process.")
-        return 'process_error'
+        return 'process_error', True # Default to draft on error
 
     logger.info(f'Starting processing for file ID: {file_id}')
 
-    # Each process needs its own client and processor instances
     try:
         processor = MarkdownProcessor(output_dir_str)
-        # Create a new client instance in the subprocess. This will build
-        # its own service object using the requestBuilder, ensuring safety.
         client = GoogleDriveClient()
     except Exception as init_error:
-        # file_name could be logged here if absolutely necessary for debugging init errors
         logger.exception(f'Error initializing client/processor for file ID {file_id}')
-        return 'init_error'
+        return 'init_error', True # Default to draft on error
 
     try:
-        if processor.check_cache(file_id, drive_modified_time):
-            return 'skipped'
+        should_skip, is_draft_if_skipped = processor.check_cache(file_id, drive_modified_time)
+        if should_skip:
+            return 'skipped', is_draft_if_skipped
 
-        # Use the client instance created within this process
-        # Pass file_name for potential internal use in download_markdown, though it won't be logged directly by it
         file_name_for_download = drive_metadata.get('name', f"ID: {file_id or 'Unknown'}")
         md_content = client.download_markdown(file_id, file_name_for_download)
-        if md_content is None: return 'download_error'
+        if md_content is None:
+            return 'download_error', True # Default to draft on error
 
-        processed_content = processor.process_content(md_content, drive_metadata)
-        if processed_content is None: return 'process_error'
+        processed_content_str = processor.process_content(md_content, drive_metadata)
+        if processed_content_str is None:
+            return 'process_error', True # Default to draft on error
 
-        if processor.save_markdown(file_id, processed_content):
-            return 'success'
+        # Get draft status from processed content
+        is_draft: bool = True # Default to draft if parsing fails
+        try:
+            processed_post_obj = frontmatter.loads(processed_content_str)
+            # If 'draft' is not present, it's not a draft by default in Hugo.
+            # However, for our logic, if not specified, assume False (not a draft)
+            # unless explicitly set to True.
+            is_draft = processed_post_obj.get('draft', False)
+        except Exception:
+            logger.warning(
+                f"[{file_id}] Could not parse frontmatter from processed content "
+                f"to get draft status. Assuming draft=False for safety if processed."
+            )
+            is_draft = False # If content was processed, assume not draft if unspecified
+
+        if processor.save_markdown(file_id, processed_content_str):
+            return 'success', is_draft
         else:
-            return 'save_error'
+            return 'save_error', is_draft # Return determined draft status even on save error
 
     except Exception as e:
         logger.exception(f'Unexpected error during task execution for file ID {file_id}')
-        return 'unknown_error'
+        return 'unknown_error', True # Default to draft on major error
 
 
 # --- Main Execution ---
@@ -735,69 +759,99 @@ def main() -> None:
 
     # Sync local files
     logger.info(f'Checking local files in {output_path.resolve()} for cleanup...')
-    if output_path.exists():
-        local_md_files = list(output_path.glob('*.md'))
-        local_ids = set()
-        for local_file in local_md_files:
-            file_id = local_file.stem
-            if re.match(r'^[a-zA-Z0-9_-]+$', file_id): # Basic check for Drive ID format
-                local_ids.add(file_id)
-            else:
-                logger.warning(f'Found local file with unexpected name format: {local_file.name}. Skipping.')
+    deleted_public_files_count = 0
 
-        ids_to_delete = local_ids - current_drive_ids
-        if ids_to_delete:
-            logger.info(f'Found {len(ids_to_delete)} local files to delete:')
-            for file_id_to_delete in ids_to_delete:
-                local_file_path = output_path / f'{file_id_to_delete}.md'
-                logger.info(f'  - Deleting {local_file_path.name}')
+    if output_path.exists():
+        local_md_files_paths = list(output_path.glob('*.md'))
+        local_files_metadata: Dict[str, Dict[str, Any]] = {} # Store {'file_id': {'path': Path, 'is_draft': bool}}
+
+        for local_path_obj in local_md_files_paths:
+            file_id = local_path_obj.stem
+            if re.match(r'^[a-zA-Z0-9_-]+$', file_id): # Basic check for Drive ID format
+                is_draft = True # Default to draft if parsing fails
                 try:
-                    local_file_path.unlink()
-                except OSError as e:
-                    logger.error(f'    Error deleting file {local_file_path}: {e}')
+                    with open(local_path_obj, 'r', encoding='utf-8') as f:
+                        post = frontmatter.load(f)
+                        is_draft = post.get('draft', False)
+                    local_files_metadata[file_id] = {'path': local_path_obj, 'is_draft': is_draft}
+                except Exception as e:
+                    logger.warning(f"Could not read/parse {local_path_obj} to get draft status during cleanup pre-check: {e}. Assuming draft.")
+                    local_files_metadata[file_id] = {'path': local_path_obj, 'is_draft': True} # Assume draft
+            else:
+                logger.warning(f'Found local file with unexpected name format: {local_path_obj.name}. Skipping cleanup consideration.')
+
+        local_file_ids_on_disk = set(local_files_metadata.keys())
+        ids_to_delete_from_disk = local_file_ids_on_disk - current_drive_ids
+
+        if ids_to_delete_from_disk:
+            logger.info(f'Found {len(ids_to_delete_from_disk)} local files to delete:')
+            for file_id_to_delete in ids_to_delete_from_disk:
+                metadata = local_files_metadata.get(file_id_to_delete)
+                if metadata:
+                    local_file_path_to_delete = metadata['path']
+                    was_public = not metadata['is_draft']
+                    logger.info(f'  - Deleting {local_file_path_to_delete.name} (was_public: {was_public})')
+                    if was_public:
+                        deleted_public_files_count += 1
+                    try:
+                        local_file_path_to_delete.unlink()
+                    except OSError as e:
+                        logger.error(f'    Error deleting file {local_file_path_to_delete}: {e}')
+                else:
+                    # Should not happen if logic is correct, but as a safeguard:
+                    logger.warning(f"Attempted to delete file ID {file_id_to_delete} but its metadata was not pre-scanned. Skipping deletion.")
         else:
             logger.info('No local files need deletion.')
     else:
         logger.info('Output directory does not exist, skipping cleanup.')
 
-    if not drive_files:
-        logger.info('No Google Docs found to process after cleanup check.')
+    if not drive_files and deleted_public_files_count == 0: # Also check if a public file was deleted
+        logger.info('No Google Docs found to process and no public files deleted.')
         logger.info('Conversion finished.')
         return
 
     logger.info(f'Submitting {len(drive_files)} Google Docs for processing...')
 
     # Parallel Processing
-    results: Dict[str, int] = {'success': 0, 'skipped': 0, 'failed': 0}
+    results: Dict[str, int] = {
+        'success': 0, 'skipped': 0, 'failed': 0, 'public_updated': 0
+    }
+    processed_file_details: List[Tuple[ProcessStatus, bool]] = [] # Stores (status, is_draft)
     output_dir_abs_str = str(output_path.resolve())
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
-        future_to_file: Dict[concurrent.futures.Future, DriveMetadata] = {
+        future_to_file_meta: Dict[concurrent.futures.Future[Tuple[ProcessStatus, bool]], DriveMetadata] = {
             executor.submit(process_single_file_task, meta, output_dir_abs_str): meta
             for meta in drive_files
         }
 
-        for future in concurrent.futures.as_completed(future_to_file):
-            file_meta = future_to_file[future]
+        for future in concurrent.futures.as_completed(future_to_file_meta):
+            file_meta = future_to_file_meta[future]
             file_id = file_meta.get('id', 'Unknown ID')
-            # file_name is not logged here directly to avoid exposing it in summary logs
-            # file_name = file_meta.get('name', f'ID: {file_id}')
             try:
-                status: ProcessStatus = future.result()
-                if status == 'success': results['success'] += 1
-                elif status == 'skipped': results['skipped'] += 1
-                else:
+                status, is_draft = future.result()
+                processed_file_details.append((status, is_draft))
+
+                if status == 'success':
+                    results['success'] += 1
+                    if not is_draft:
+                        results['public_updated'] += 1
+                elif status == 'skipped':
+                    results['skipped'] += 1
+                else: # init_error, download_error, process_error, save_error, unknown_error
                     results['failed'] += 1
                     logger.error(
                         f"Processing failed for file ID '{file_id}' "
-                        f'with status: {status}'
+                        f'with status: {status} (is_draft: {is_draft})'
                     )
-            except Exception as exc:
+            except Exception as exc: # pylint: disable=broad-except
                 results['failed'] += 1
+                # Log the exception with file_id for better debugging
                 logger.exception(
                     f"File ID '{file_id}' generated an unexpected "
-                    f'exception during execution'
+                    f'exception during execution: {exc}'
                 )
+                processed_file_details.append(('unknown_error', True)) # Assume draft on unhandled exception
 
     # Report Summary
     end_time = time.time()
@@ -807,7 +861,8 @@ def main() -> None:
         f"Conversion Summary:\n"
         f"  Duration: {duration:.2f} seconds\n"
         f"  Total Files Found: {len(drive_files)}\n"
-        f"  Successfully Processed/Updated: {results['success']}\n"
+        f"  Successfully Processed (Overall): {results['success']}\n"
+        f"  Successfully Processed (Public, non-draft): {results['public_updated']}\n"
         f"  Skipped (Up-to-date): {results['skipped']}\n"
         f"  Failed: {results['failed']}\n"
         f"{'-'*30}"
@@ -823,12 +878,21 @@ def main() -> None:
         exit_code = 0
 
     # --- Marker File Logic ---
-    content_updated = results['success'] > 0 or ids_to_delete # Determine if content was actually changed
-    marker_file = Path('.content-updated')
-    logger.info(f"Marker logic check: content_updated flag is: {content_updated}")
+    public_content_processed_and_not_draft = results['public_updated'] > 0
 
-    if content_updated:
-        logger.info("Attempting to create marker file '.content-updated'...")
+    # Marker creation condition:
+    # Deploy if any non-draft content was successfully updated/created OR if any public file was deleted.
+    should_create_marker = public_content_processed_and_not_draft or (deleted_public_files_count > 0)
+
+    marker_file = Path('.content-updated')
+    logger.info(
+        f"Marker logic check: public_content_processed_not_draft: {public_content_processed_and_not_draft}, "
+        f"deleted_public_files_count: {deleted_public_files_count}, "
+        f"should_create_marker: {should_create_marker}"
+    )
+
+    if should_create_marker:
+        logger.info("Public content updated or public file deleted. Attempting to create marker file '.content-updated'...")
         try:
             marker_file.touch()
             if marker_file.exists():
@@ -837,12 +901,10 @@ def main() -> None:
                  logger.error("Marker file creation attempted but file does not exist afterwards.")
         except OSError as e:
             logger.error(f"Failed to create marker file: {e}")
-            # Decide if this should cause a failure? For now, just log.
     else:
-        logger.info("No content updates detected, marker file will not be created.")
-        # Ensure marker file doesn't exist from previous runs if no updates
+        logger.info("No public content updates or public file deletions detected, marker file will not be created/will be removed.")
         if marker_file.exists():
-             logger.info("Attempting to remove existing marker file as no updates occurred...")
+             logger.info("Attempting to remove existing marker file as no relevant updates occurred...")
              try:
                  marker_file.unlink()
                  logger.info("Successfully removed existing marker file.")
