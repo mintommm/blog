@@ -2,13 +2,13 @@ name: Download Content, Build and Deploy
 
 on:
   schedule:
-    - cron: '0 * * * *' # 毎時0分に定期実行
+    - cron: 0 * * * * # 毎時0分に定期実行
   workflow_dispatch:
     inputs:
       ignore_cache:
         description: 'キャッシュを無視してコンテンツを強制的に再ダウンロードしますか？ (true/false)'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 jobs:
