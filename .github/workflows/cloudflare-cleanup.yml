@@ -5,8 +5,8 @@ name: Cleanup Old Cloudflare Deployments
 
 on:
   schedule:
-    - cron: 0 0 * * 0 # 毎週日曜日の0時0分 (UTC) に定期実行
-  workflow_dispatch: # 手動実行も可能
+    - cron: 0 0 * * 0
+  workflow_dispatch:
     inputs:
       delete_aliased_deployments:
         description: 'エイリアスされたデプロイも削除しますか？ (true/false)'
