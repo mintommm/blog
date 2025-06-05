@@ -220,11 +220,10 @@ class GoogleDriveClient:
                 for item in items:
                     mime_type = item.get('mimeType')
                     item_id = item.get('id')
-                    # Define item_name early for use in logging, especially if ID is missing.
-                    item_name = item.get('name', f"Unnamed Item (ID: {item_id or 'N/A'})")
+                    actual_name_for_debug_only = item.get('name') # Store actual name for debugging, NOT for general logging
 
                     if mime_type == MIME_TYPE_FOLDER:
-                        logger.info(f'Scanning subfolder with ID: {item_id}')
+                        logger.info(f'Scanning subfolder with ID: {item_id if item_id else "UNKNOWN_FOLDER_ID"}')
                         if item_id:
                             try:
                                 # Recursive call uses the same client instance
@@ -235,8 +234,9 @@ class GoogleDriveClient:
                                     f'{sub_error}. Skipping folder.'
                                 )
                         else:
-                            # item_name is still useful here for context if ID is missing
-                            logger.warning(f"Folder '{item_name}' has no ID. Skipping.")
+                            # This case means item_id is None or empty.
+                            # We avoid logging actual_name_for_debug_only here to prevent accidental name leakage.
+                            logger.warning(f"Folder found with missing ID. Skipping exploration of this folder.")
 
                     elif mime_type == MIME_TYPE_DOCUMENT:
                         all_files.append(item)
@@ -272,9 +272,11 @@ class GoogleDriveClient:
             The Markdown content as a string, or None if download fails.
         """
         # Uses self.service which is built with requestBuilder
-        logger.info(f'Attempting download for file ID: {file_id} (Name Hint: {file_name})')
+        # file_name parameter is kept for potential future use (e.g. if Google API changes)
+        # or for very specific, non-standard-log debugging, but not used in standard logs.
+        logger.info(f'Attempting download for file ID: {file_id}')
         if not self.service:
-            logger.error('Drive service not initialized for download.')
+            logger.error(f'Drive service not initialized for download of file ID: {file_id}.')
             return None
         try:
             # This export_media call will use the requestBuilder
@@ -301,7 +303,7 @@ class GoogleDriveClient:
 
         except (HttpError, Exception) as error:
             logger.error(
-                f'Failed to download file ID: {file_id} (Name Hint: {file_name}) after retries: {error}'
+                f'Failed to download file ID: {file_id} after retries: {error}'
             )
             return None
 
