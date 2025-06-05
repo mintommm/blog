@@ -57,19 +57,20 @@ Google Drive からコンテンツを取得し、Hugo 用に処理するコア�
         *   `draft`: デフォルトで `false` を設定（既存の値があれば優先）。
         *   `google_drive_id`: 対応する Google Drive ファイル ID を記録。
         *   `modifiedTime`: Drive の `modifiedTime` の生文字列をキャッシュ比較用に記録。
-    *   **画像変換:** Markdown 内の Base64 PNG 画像 (`data:image/png;base64,...`) を検出し、AVIF 形式 (`data:image/avif;base64,...`) に変換します（Pillow と pillow-avif-plugin を使用）。画像幅が設定値 (`IMAGE_WIDTH`) を超える場合はリサイズします。
+    *   **画像変換:** Markdown 内の Base64 PNG 画像 (`data:image/png;base64,...`) を検出し、AVIF 形式 (`data:image/avif;base64,...`) に変換します。この処理は Pillow ライブラリのネイティブ機能を使用しており、以前使用していた `pillow-avif-plugin` は不要になりました。画像幅が設定値 (`IMAGE_WIDTH`) を超える場合はリサイズします。
     *   **キャッシュ管理:** ローカルに保存されている Markdown ファイルの `modifiedTime` フロントマターと、Drive から取得した最新の `modifiedTime` を比較し、変更がない場合はダウンロード・処理をスキップします。ファイルの `draft` 状態もキャッシュ比較時に考慮されます。
-    *   **ローカルファイル同期:** Drive 上に存在しないファイルに対応するローカル Markdown ファイル (`content/google-drive/{file_id}.md`) を削除します。削除されるファイルが以前公開状態 (`draft: false`) であったかどうかも記録されます。
-    *   **変更検知マーカー:** 以下のいずれかの条件を満たす場合にのみ、リポジトリルートに `.content-updated` ファイルを作成します。
+    *   **ローカルファイル同期:** Drive 上に存在しないファイルに対応するローカル Markdown ファイル (`content/google-drive/{file_id}.md`) を削除します。この処理は `main()` 内のヘルパー関数 `_synchronize_local_files()` で実行され、削除されるファイルが以前公開状態 (`draft: false`) であったかどうかも記録されます。
+    *   **変更検知マーカー:** 以下のいずれかの条件を満たす場合にのみ、リポジトリルートに `.content-updated` ファイルを作成します。この処理は `main()` 内のヘルパー関数 `_handle_marker_file()` で実行されます。
         1.  公開状態 (`draft: false`) の記事が新規作成または更新された場合。
         2.  以前公開状態 (`draft: false`) であった記事が Google Drive から削除された場合。
     *   **並列処理:** 各ファイルのダウンロードと処理を `concurrent.futures.ProcessPoolExecutor` を使用して並列化し、処理時間を短縮します。
-    *   **エラーハンドリングとリトライ:** Google Drive API 呼び出し時に一時的なエラーが発生した場合、指数バックオフを用いたリトライ処理を行います。処理中に回復不能なエラーが発生した場合はログに出力し、最終的にエラーがあった場合は非ゼロの終了コードで終了します。
+    *   **エラーハンドリングとリトライ:** Google Drive API 呼び出し時に一時的なエラーが発生した場合、指数バックオフを用いたリトライ処理を行います。処理中に回復不能なエラーが発生した場合はログに出力し、最終的にエラーがあった場合は `sys.exit(1)` で終了します。
     *   **ロギング:** `logging` モジュールを使用し、処理の進行状況やエラー情報を標準出力に出力します。
-*   **クラス構成:**
+*   **構造:**
     *   `GoogleDriveClient`: Google Drive API との通信（認証、リスト、ダウンロード、リトライ）を担当。
-    *   `MarkdownProcessor`: Markdown ファイルの処理（キャッシュチェック、フロントマター、画像変換、保存）を担当。
-*   **依存関係:** `gdrive_sync/pyproject.toml` を参照してください。主なライブラリは `google-api-python-client`, `google-auth-httplib2`, `python-frontmatter`, `Pillow`, `pillow-avif-plugin` です。
+    *   `MarkdownProcessor`: Markdown ファイルの処理を担当。フロントマター処理（日付決定の `_determine_date`, `_determine_lastmod` やその他メタデータ設定の `_set_other_metadata` ヘルパーメソッドを含む）、画像変換、保存などを行います。
+    *   `main()`: 全体的な処理フローを制御。ローカルファイル同期 (`_synchronize_local_files`) やマーカーファイル処理 (`_handle_marker_file`) のためのヘルパー関数も呼び出します。
+*   **依存関係:** `gdrive_sync/pyproject.toml` を参照してください。主なライブラリは `google-api-python-client`, `google-auth-httplib2`, `python-frontmatter`, `Pillow`, `python-dateutil` です。
     *   **設定:** スクリプト冒頭の定数 (`MAX_RETRIES`, `OUTPUT_SUBDIR` など) や、環境変数 `GOOGLE_DRIVE_PARENT_ID` で動作を制御します。
 
 #### A.1.2. `.github/workflows/main.yml`
@@ -101,19 +102,19 @@ Cloudflare Pages の古いデプロイメントを定期的にクリーンアッ
     *   `schedule`: cron 形式で定期実行（デフォルトでは毎時）。
     *   `workflow_dispatch`: GitHub UI から手動で実行可能。キャッシュを無視するオプション (`ignore_cache`) 付き。
 *   **主要ステップ:**
-    1.  **Checkout code:** リポジトリのコードをチェックアウトします (`actions/checkout@v4`)。サブモジュールも取得します。
-    2.  **Authenticate to Google Cloud:** `google-github-actions/auth` アクションを使用し、Workload Identity Federation を介して Google Cloud に認証します。
-    3.  **Set up Python:** `gdrive_sync/.python-version` ファイルに基づいて Python 環境をセットアップします (`actions/setup-python@v5`)。
-    4.  **Install uv:** `uv` をインストールします。
-    5.  **Install dependencies with uv:** `uv sync` コマンドで `gdrive_sync/uv.lock` に基づいて Python の依存関係をインストールします (実行は `gdrive_sync` ディレクトリ内で行われます)。
-    6.  **Restore content cache:** `content/posts/google-drive` ディレクトリのキャッシュを復元します (`actions/cache@v4`)。手動実行時に `ignore_cache` が `true` の場合はスキップされます。キャッシュキーは OS と `gdrive_sync/main.py` のハッシュに基づきます。
-    7.  **Remove old marker file:** 前回のマーカーファイル `.content-updated` を削除します。
-    8.  **Run Python script:** `gdrive_sync/main.py` を実行します。必要な環境変数 (`GOOGLE_DRIVE_PARENT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`) を設定します。コンテンツに変更があれば `gdrive_sync/main.py` が `.content-updated` を作成します。
-    9.  **Check for content update marker:** `.content-updated` ファイルが存在するかチェックします。
-    10. **Save content cache:** `gdrive_sync/main.py` によって更新された `content/posts/google-drive` ディレクトリをキャッシュに保存します (`actions/cache/save@v4`)。
+    1.  **Checkout code:** リポジトリのコードをチェックアウトします (`actions/checkout@v4`)。
+    2.  **Disable quotePath for non-ASCII filenames:** Git で非ASCIIファイル名が正しく扱われるように設定します。
+    3.  **Authenticate to Google Cloud:** `google-github-actions/auth` アクションを使用し、Workload Identity Federation を介して Google Cloud に認証します。
+    4.  **Set up Python:** `gdrive_sync/.python-version` ファイルに基づいて Python 環境をセットアップします (`actions/setup-python@v5`)。
+    5.  **Install uv:** Python パッケージインストーラー `uv` をインストールします。
+    6.  **Install Python dependencies with uv using lock file:** `uv pip sync --system gdrive_sync/uv.lock` コマンドで、`gdrive_sync` ディレクトリ内の `uv.lock` ファイルに基づいて Python の依存関係をシステム環境にインストールします。**注意:** `gdrive_sync/uv.lock` はリポジトリにコミットされている必要があります。
+    7.  **Restore content cache:** `content/posts/google-drive` ディレクトリのキャッシュを復元します (`actions/cache@v4`)。手動実行時に `ignore_cache` が `true` の場合はスキップされます。キャッシュキーは OS と `gdrive_sync/main.py`, `gdrive_sync/pyproject.toml` のハッシュに基づきます。
+    8.  **Remove old marker file:** 前回のマーカーファイル `.content-updated` を削除します。
+    9.  **Run Python script to sync content from Google Drive:** `uv run python gdrive_sync/main.py` を実行します。必要な環境変数 (`GOOGLE_DRIVE_PARENT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`) を設定します。コンテンツに変更があれば `gdrive_sync/main.py` が `.content-updated` を作成します。
+    10. **Check for content update marker:** `.content-updated` ファイルが存在するかチェックし、結果を GitHub Actions の output に設定します。
     11. **Setup Hugo:** Hugo 環境をセットアップします (`peaceiris/actions-hugo@v3`)。
     12. **Build Hugo site:** `hugo` コマンドでサイトをビルドします。`--minify` オプション付きです。
-    13. **Deploy to Cloudflare Pages:** `gdrive_sync/main.py` によって `.content-updated` ファイルが作成された場合（つまり、公開コンテンツの追加・更新・削除があった場合）、または手動実行時に `ignore_cache` が `true` の場合のみ、ビルドされたサイト (`public` ディレクトリ) を Cloudflare Pages にデプロイします (`cloudflare/pages-action@v1`)。
+    13. **Deploy to Cloudflare Pages:** `steps.check_update_marker.outputs.content_was_updated == 'true'`（コンテンツが更新された場合）、または手動実行時に `ignore_cache` が `true` の場合のみ、ビルドされたサイト (`public` ディレクトリ) を Cloudflare Pages にデプロイします (`cloudflare/wrangler-action@v3`)。
 *   **必要な Secrets:** ワークフローが Google Cloud や Cloudflare と連携するために、以下の GitHub Secrets の設定が必要です。
     *   `GCP_WORKLOAD_IDENTITY_PROVIDER`: Google Cloud Workload Identity プールの **プロバイダーリソース名** (例: `projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider`)。
     *   `GCP_SERVICE_ACCOUNT`: Google Cloud サービスアカウントのメールアドレス (例: `my-service-account@my-project.iam.gserviceaccount.com`)。`google-github-actions/auth` が使用します。
@@ -151,7 +152,12 @@ Cloudflare Pages の古いデプロイメントを定期的にクリーンアッ
 #### A.2.3. Python 環境
 
 *   リポジトリの `gdrive_sync/` ディレクトリには `.python-version` ファイルが含まれており、使用する Python バージョンを指定しています。
-*   依存関係は `gdrive_sync/pyproject.toml` で定義され、`gdrive_sync/uv.lock` でバージョンが固定されています。GitHub Actions では `uv sync --cwd gdrive_sync` でインストールされます。ローカルで開発する場合も同様に `cd gdrive_sync && uv sync` を使用してください。
+*   依存関係は `gdrive_sync/pyproject.toml` で定義されています。これらの依存関係を固定したロックファイル `gdrive_sync/uv.lock` がリポジトリにコミットされている必要があります。
+*   **GitHub Actions でのインストール:** ワークフローでは `uv pip sync --system gdrive_sync/uv.lock` コマンドを使用して、ロックファイルに基づいた依存関係をインストールします。
+*   **ローカル開発でのインストール:** ローカルで開発環境をセットアップする場合、まず `uv` をインストールし、`gdrive_sync` ディレクトリに移動してから以下のコマンドを実行します。
+    *   依存関係のインストール: `uv pip sync --system uv.lock` (もし仮想環境を使用している場合は `--system` を外すことも検討)。
+    *   ロックファイルの更新/生成: `pyproject.toml` に変更を加えた場合、`uv pip compile pyproject.toml -o uv.lock` を実行して `uv.lock` を更新し、変更をリポジトリにコミットしてください。
+*   **`uv` のインストール:** `uv` 自体は `pip install uv` でインストールできます。
 
 ### A.3. 実行方法
 
@@ -178,28 +184,37 @@ Cloudflare Pages の古いデプロイメントを定期的にクリーンアッ
 # ...
 dependencies = [
     "google-api-python-client>=2.167.0",
-    "pillow-avif-plugin>=1.5.1",
+    "Pillow>=10.0.0", # Pillow 10+ has built-in AVIF support
     "python-frontmatter>=1.1.0",
-    "google-auth-httplib2>=0.1.0", # Added for AuthorizedHttp
-    "httplib2>=0.20.0", # Added as dependency for google-auth-httplib2 and direct use
-    "tzdata", # Added for zoneinfo
+    "google-auth-httplib2>=0.1.0", # For AuthorizedHttp
+    "httplib2>=0.20.0", # Dependency for google-auth-httplib2 and direct use
+    "tzdata", # For zoneinfo
+    "python-dateutil>=2.9.0", # For flexible date parsing
 ]
 ```
 
 ### A.5. 今後のメンテナンス (LLM エージェント向け)
 
-*   **コード構造:** 主要なロジックは `gdrive_sync/main.py` 内の `GoogleDriveClient` クラス（API通信）と `MarkdownProcessor` クラス（ファイル処理）に分割されています。`main()` 関数が全体の処理フローを制御します。
+*   **コード構造 (`gdrive_sync/main.py`):**
+    *   `GoogleDriveClient`: Google Drive API との通信（認証、ファイルリスト取得、ダウンロード、APIリトライ処理）を担当します。
+    *   `MarkdownProcessor`: ダウンロードされた Markdown コンテンツの処理を担当します。これには、キャッシュチェック、フロントマターの解析と更新（日付処理は `_determine_date`, `_determine_lastmod` ヘルパーメソッドを使用）、画像変換（Pillow のネイティブ機能を使用）、ローカルファイルへの保存などが含まれます。
+    *   `main()`: スクリプトのメインエントリーポイントで、全体の処理フローを制御します。`GoogleDriveClient` と `MarkdownProcessor` のインスタンスを作成し、処理を調整します。ローカルファイルの同期 (`_synchronize_local_files`) や変更検知マーカーファイルの処理 (`_handle_marker_file`) といったヘルパー関数も `main` 関数から呼び出されます。
+    *   並列処理: `concurrent.futures.ProcessPoolExecutor` を使用して、複数のファイルを並列にダウンロード・処理します。
+*   **GitHub Actions ワークフロー (`.github/workflows/main.yml`):**
+    *   Python の依存関係は `gdrive_sync/uv.lock` ファイルに基づいて `uv pip sync --system gdrive_sync/uv.lock` を使ってインストールされます。`uv.lock` ファイルは `gdrive_sync/pyproject.toml` から `uv pip compile pyproject.toml -o gdrive_sync/uv.lock` ( `gdrive_sync` ディレクトリ内で実行) によって生成・更新され、リポジトリにコミットされている必要があります。
+    *   コンテンツの更新検知は `gdrive_sync/main.py` が出力する `.content-updated` マーカーファイルによって行われます。このマーカーが存在する場合、または手動実行でキャッシュが無視された場合にのみ、Hugo ビルドと Cloudflare Pages へのデプロイが実行されます。
 *   **設定変更:**
-    *   基本的な動作設定（リトライ回数、画像サイズ、出力サブディレクトリ名など）は `gdrive_sync/main.py` 冒頭の定数を変更します。
+    *   基本的な動作設定（リトライ回数 `MAX_RETRIES`、画像幅 `IMAGE_WIDTH`、出力サブディレクトリ名 `OUTPUT_SUBDIR` など）は `gdrive_sync/main.py` 冒頭のグローバル定数を変更します。
     *   Google Drive の対象フォルダは GitHub Secret `GOOGLE_DRIVE_PARENT_ID` で設定します。
     *   デプロイ先や認証情報は GitHub Secrets で管理されます。
 *   **エラー発生時の確認ポイント:**
     *   GitHub Actions の実行ログを確認してください。`gdrive_sync/main.py` は `logging` モジュールを使用しており、詳細な情報やエラーメッセージが出力されます。
     *   `gdrive_sync/main.py` 内の `_execute_with_retry` メソッドは API エラー時のリトライ状況をログ出力します。
-    *   ファイル処理に失敗した場合、スクリプトは非ゼロの終了コードで終了し、Actions のステップが失敗します。ログで `Processing failed for ...` や `Exiting with error code 1 ...` といったメッセージを探してください。
-    *   キャッシュ関連の問題が疑われる場合は、手動実行時に `ignore_cache` を `true` にして試してください。
+    *   ファイル処理に失敗した場合、スクリプトは `sys.exit(1)` で終了し、Actions のステップが失敗します。ログで `Processing failed for ...` や `Exiting with error code 1 ...` といったメッセージを探してください。
+    *   キャッシュ関連の問題が疑われる場合は、GitHub Actions の手動実行時に `ignore_cache` を `true` に設定して試してください。
 *   **機能追加・変更:**
-    *   Google Drive API 関連の変更は `GoogleDriveClient` クラスを修正します。
-    *   Markdown の処理（フロントマター、画像変換など）の変更は `MarkdownProcessor` クラスを修正します。
-    *   並列処理や全体のフローの変更は `main()` 関数および `process_single_file_task` 関数を修正します。
-    *   ワークフロー自体の変更（トリガー、使用する Action、デプロイ方法など）は `.github/workflows/main.yml` を編集します。
+    *   Google Drive API 関連の変更（例: 取得するフィールドの変更、クエリの修正など）は `GoogleDriveClient` クラスを修正します。
+    *   Markdown の処理ロジック（例: 新しいフロントマターフィールドの追加、画像処理方法の変更など）は `MarkdownProcessor` クラス内の関連メソッド（例: `process_content`, `_determine_date`, `_convert_image` など）を修正します。
+    *   並列処理の挙動やメインの制御フローに変更が必要な場合は `main()` 関数および `process_single_file_task` 関数を修正します。
+    *   ワークフロー自体の変更（例: トリガー条件の変更、使用する Action のバージョンアップ、デプロイ手順の変更など）は `.github/workflows/main.yml` を編集します。
+    *   Python の依存関係を変更する場合は、`gdrive_sync/pyproject.toml` を更新後、`gdrive_sync` ディレクトリ内で `uv pip compile pyproject.toml -o uv.lock` を実行して `uv.lock` ファイルを再生成し、両方のファイルをコミットしてください。

@@ -5,9 +5,7 @@ to Markdown, processes frontmatter, converts embedded base64 PNG images to
 AVIF, and saves the results to a local directory for use with Hugo. It uses
 modification times for caching and runs processing tasks in parallel.
 """
-
-import base64
-import concurrent.futures
+import sys
 import base64
 import concurrent.futures
 import io
@@ -30,8 +28,8 @@ from dateutil.tz import tzutc # Import tzutc for timezone handling
 import frontmatter
 import google.auth
 import httplib2
-import PIL
-import pillow_avif
+import PIL # Pillow library
+# import pillow_avif # No longer explicitly needed if Pillow >= 10.0.0 handles AVIF well
 from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build, Resource
 from googleapiclient.errors import HttpError
@@ -81,7 +79,8 @@ class GoogleDriveClient:
 
     def __init__(self) -> None:
         """Initializes the GoogleDriveClient."""
-        # Get credentials once during initialization
+        # Store credentials and project ID obtained via ADC.
+        # These are used by the requestBuilder for each API call.
         self.credentials, self.project = self._get_credentials()
         if not self.credentials:
             raise RuntimeError('Failed to obtain Google Cloud credentials.')
@@ -131,9 +130,11 @@ class GoogleDriveClient:
             A configured HttpRequest object.
         """
         if not self.credentials:
-             # This should ideally not happen if __init__ succeeded
+             # This check should ideally not be hit if __init__ succeeded.
              raise RuntimeError("Credentials not available for building request.")
-        # Create a new AuthorizedHttp with a fresh httplib2.Http instance
+        # Create a new AuthorizedHttp with a fresh httplib2.Http instance.
+        # This is crucial for thread/process safety, ensuring each request
+        # has its own isolated HTTP client authorized with the shared credentials.
         new_http = AuthorizedHttp(self.credentials, http=httplib2.Http())
         return HttpRequest(new_http, *args, **kwargs)
 
@@ -146,9 +147,11 @@ class GoogleDriveClient:
             # Use requestBuilder to handle http object creation per request
             service: Resource = build(
                 'drive', 'v3',
-                requestBuilder=self._build_request,
-                credentials=self.credentials, # Pass credentials for builder
-                cache_discovery=False # Avoid potential discovery cache issues
+                requestBuilder=self._build_request, # For thread/process safety
+                credentials=self.credentials, # Credentials for the builder
+                # Disable discovery cache to avoid issues in environments where
+                # the cache might be stale or not writable (e.g. serverless).
+                cache_discovery=False
             )
             logger.info('Google Drive service built successfully.')
             return service
@@ -217,10 +220,10 @@ class GoogleDriveClient:
                 for item in items:
                     mime_type = item.get('mimeType')
                     item_id = item.get('id')
-                    item_name = item.get('name', f"Unnamed Item (ID: {item_id})") # Keep item_name for potential internal use, but don't log it directly
+                    actual_name_for_debug_only = item.get('name') # Store actual name for debugging, NOT for general logging
 
                     if mime_type == MIME_TYPE_FOLDER:
-                        logger.info(f'Scanning subfolder with ID: {item_id}')
+                        logger.info(f'Scanning subfolder with ID: {item_id if item_id else "UNKNOWN_FOLDER_ID"}')
                         if item_id:
                             try:
                                 # Recursive call uses the same client instance
@@ -231,8 +234,9 @@ class GoogleDriveClient:
                                     f'{sub_error}. Skipping folder.'
                                 )
                         else:
-                            # item_name is still useful here for context if ID is missing
-                            logger.warning(f"Folder '{item_name}' has no ID. Skipping.")
+                            # This case means item_id is None or empty.
+                            # We avoid logging actual_name_for_debug_only here to prevent accidental name leakage.
+                            logger.warning(f"Folder found with missing ID. Skipping exploration of this folder.")
 
                     elif mime_type == MIME_TYPE_DOCUMENT:
                         all_files.append(item)
@@ -257,12 +261,22 @@ class GoogleDriveClient:
         )
         return all_files
 
-    def download_markdown(self, file_id: str, file_name: str) -> Optional[str]: # file_name param retained for context if needed, but not logged directly
-        """Downloads a Google Doc as Markdown, handling retries."""
+    def download_markdown(self, file_id: str, file_name: str) -> Optional[str]: # file_name is primarily for logging context here
+        """Downloads a Google Doc as Markdown, handling retries.
+
+        Args:
+            file_id: The Google Drive file ID.
+            file_name: The name of the file, used for logging context if errors occur.
+
+        Returns:
+            The Markdown content as a string, or None if download fails.
+        """
         # Uses self.service which is built with requestBuilder
+        # file_name parameter is kept for potential future use (e.g. if Google API changes)
+        # or for very specific, non-standard-log debugging, but not used in standard logs.
         logger.info(f'Attempting download for file ID: {file_id}')
         if not self.service:
-            logger.error('Drive service not initialized for download.')
+            logger.error(f'Drive service not initialized for download of file ID: {file_id}.')
             return None
         try:
             # This export_media call will use the requestBuilder
@@ -295,7 +309,12 @@ class GoogleDriveClient:
 
 
 class MarkdownProcessor:
-    """Handles processing and saving of Markdown files derived from Google Docs."""
+    """
+    Handles processing of Markdown content downloaded from Google Docs.
+
+    This includes parsing and updating frontmatter, converting embedded images
+    to AVIF, and preparing the content for saving.
+    """
 
     def __init__(self, output_dir: str) -> None:
         """Initializes the MarkdownProcessor."""
@@ -309,7 +328,15 @@ class MarkdownProcessor:
             self.tokyo_tz = ZoneInfo('UTC')
 
     def get_local_path(self, file_id: str) -> Path:
-        """Generates the local file path for a given Google Drive file ID."""
+        """
+        Generates the local file path for a given Google Drive file ID.
+
+        Args:
+            file_id: The Google Drive file ID.
+
+        Returns:
+            The Path object for the local Markdown file.
+        """
         return self.output_dir / f'{file_id}.md'
 
     def check_cache(
@@ -394,7 +421,20 @@ class MarkdownProcessor:
         return False, False # Do not skip, is_draft is irrelevant here
 
     def _convert_image(self, base64_img_data: str) -> str:
-        """Converts a single base64 PNG image string to the target format (AVIF)."""
+        """
+        Converts a single base64 PNG image string to the target format (AVIF).
+
+        Relies on Pillow's built-in AVIF support (Pillow >= 10.0.0).
+        Note: `pillow-avif-plugin` might need to be removed from `pyproject.toml`
+        if native Pillow support proves sufficient.
+        If Pillow cannot handle the conversion, the original base64 string is returned.
+
+        Args:
+            base64_img_data: The base64 encoded PNG image string.
+
+        Returns:
+            The base64 encoded AVIF image string, or the original string on error.
+        """
         expected_prefix = 'data:image/png;base64,'
         if not base64_img_data.startswith(expected_prefix):
             logger.warning('Image data lacks expected PNG base64 prefix. Skipping.')
@@ -462,222 +502,344 @@ class MarkdownProcessor:
         return content
 
     def _parse_iso_datetime(self, iso_str: Optional[str]) -> Optional[datetime]:
-        """Safely parses an ISO 8601 string (typically from Drive API)
-           into a timezone-aware datetime object in the target timezone."""
+        """
+        Safely parses an ISO 8601 string (typically from Drive API)
+        into a timezone-aware datetime object in the target timezone.
+
+        Args:
+            iso_str: The ISO 8601 datetime string.
+
+        Returns:
+            A timezone-aware datetime object, or None if parsing fails.
+        """
         if not iso_str: return None
         try:
-            # Use dateutil parser for flexibility, handles 'Z' automatically
+            # Use dateutil parser for flexibility, handles 'Z' (UTC) automatically.
             dt_parsed = dateutil_parser.isoparse(iso_str)
-            # If naive after parsing ISO string, assume UTC as per ISO 8601
+
+            # If the parsed datetime is naive (no timezone info),
+            # ISO 8601 implies it should be treated as local time. However,
+            # Drive API times are typically UTC ('Z'). For robustness, if we
+            # encounter a naive datetime after parsing an ISO string that should
+            # ideally have timezone info, we assume UTC. tzutc() provides UTC.
             if dt_parsed.tzinfo is None or dt_parsed.tzinfo.utcoffset(dt_parsed) is None:
-                 logger.warning(f"Parsed ISO datetime '{iso_str}' is naive. Assuming UTC.")
-                 dt_parsed = dt_parsed.replace(tzinfo=tzutc())
-            # Convert to the target timezone
+                 logger.warning(f"Parsed ISO datetime '{iso_str}' is naive. Assuming UTC for safety.")
+                 dt_parsed = dt_parsed.replace(tzinfo=tzutc()) # Make it UTC-aware
+
+            # Convert the (now UTC-aware) datetime to the target timezone (e.g., self.tokyo_tz).
             return dt_parsed.astimezone(self.tokyo_tz)
         except (ValueError, TypeError) as e:
             logger.warning(f"Could not parse ISO datetime string '{iso_str}' using dateutil.isoparse: {e}")
             return None
 
     def _format_datetime(self, dt_obj: Optional[datetime]) -> Optional[str]:
-        """Formats a datetime object into the Hugo-compatible string format."""
+        """
+        Formats a datetime object into the Hugo-compatible string format.
+
+        Ensures the datetime is timezone-aware (using default timezone if naive)
+        before formatting.
+
+        Args:
+            dt_obj: The datetime object to format.
+
+        Returns:
+            A string representation of the datetime suitable for Hugo frontmatter,
+            or None if the input is not a valid datetime object.
+        """
         if not isinstance(dt_obj, datetime): return None
         try:
             dt_aware = dt_obj
-            if dt_obj.tzinfo is None:
-                logger.warning(f'Assigning default timezone {DEFAULT_TIMEZONE} '
+            # If datetime object is naive (lacks timezone information),
+            # make it aware using the configured default timezone (self.tokyo_tz).
+            # This is crucial for consistent date representation in Hugo output.
+            if dt_obj.tzinfo is None or dt_obj.tzinfo.utcoffset(dt_obj) is None:
+                logger.warning(f'Assigning default timezone {self.tokyo_tz.key} '
                                f'to naive datetime {dt_obj} during formatting.')
+                # For zoneinfo, replace(tzinfo=...) is the standard way.
+                # `localize` is more for pytz when dealing with ambiguous times.
                 dt_aware = dt_obj.replace(tzinfo=self.tokyo_tz)
+            # Ensure it's in the target timezone before formatting if it was already aware.
+            elif dt_aware.tzinfo is not self.tokyo_tz :
+                dt_aware = dt_aware.astimezone(self.tokyo_tz)
+
+
             return dt_aware.strftime('%Y-%m-%d %H:%M:%S %z')
         except Exception as e:
             logger.error(f'Error formatting datetime object {dt_obj}: {e}')
             return None
 
+    def _determine_date(
+        self,
+        current_date_val: Any,
+        drive_created_str: Optional[str],
+        file_id_for_logs: str
+    ) -> datetime:
+        """
+        Determines the 'date' for frontmatter.
+
+        It prioritizes existing valid 'date' from frontmatter, then falls back
+        to Drive's 'createdTime', and finally to the current time if necessary.
+        Ensures the resulting datetime is timezone-aware using the configured
+        DEFAULT_TIMEZONE (self.tokyo_tz).
+
+        Args:
+            current_date_val: The 'date' value from existing frontmatter (can be str, date, datetime).
+            drive_created_str: The 'createdTime' string from Google Drive metadata (ISO 8601 format).
+            file_id_for_logs: File ID used for logging context.
+
+        Returns:
+            A timezone-aware datetime object, localized to self.tokyo_tz.
+        """
+        final_date_dt: Optional[datetime] = None
+
+        if isinstance(current_date_val, datetime):
+            final_date_dt = current_date_val
+            # If already a datetime object, ensure it's timezone-aware.
+            # If naive, assume it's intended to be in the DEFAULT_TIMEZONE.
+            # If aware but different timezone, convert to DEFAULT_TIMEZONE.
+            if final_date_dt.tzinfo is None or final_date_dt.tzinfo.utcoffset(final_date_dt) is None:
+                logger.warning(f"[{file_id_for_logs}] Existing 'date' ({current_date_val}) is naive. "
+                               f"Assigning default timezone {self.tokyo_tz.key}.")
+                final_date_dt = final_date_dt.replace(tzinfo=self.tokyo_tz)
+            else: # It's aware, convert to the target timezone
+                final_date_dt = final_date_dt.astimezone(self.tokyo_tz)
+        elif isinstance(current_date_val, date): # Handles YYYY-MM-DD from frontmatter
+            logger.info(f"[{file_id_for_logs}] Frontmatter 'date' is a date object: {current_date_val}. Converting to datetime.")
+            # Combine with midnight time and make it timezone-aware using DEFAULT_TIMEZONE.
+            final_date_dt = datetime.combine(current_date_val, datetime.min.time()).replace(tzinfo=self.tokyo_tz)
+        elif isinstance(current_date_val, str): # Handle string date values
+            try:
+                date_str_stripped = current_date_val.strip()
+                logger.info(f"[{file_id_for_logs}] Attempting to parse 'date' string '{date_str_stripped}' using dateutil.")
+                dt_parsed = dateutil_parser.parse(date_str_stripped)
+                # After parsing, handle timezone: if naive, assume DEFAULT_TIMEZONE; if aware, convert.
+                if dt_parsed.tzinfo is None or dt_parsed.tzinfo.utcoffset(dt_parsed) is None:
+                    logger.warning(f"[{file_id_for_logs}] Parsed 'date' string '{current_date_val}' is naive. "
+                                   f"Assigning default timezone {self.tokyo_tz.key}.")
+                    final_date_dt = dt_parsed.replace(tzinfo=self.tokyo_tz)
+                else: # Parsed date is timezone-aware, convert to DEFAULT_TIMEZONE
+                    logger.info(f"[{file_id_for_logs}] Parsed 'date' string '{current_date_val}' has timezone. Converting to {self.tokyo_tz.key}.")
+                    final_date_dt = dt_parsed.astimezone(self.tokyo_tz)
+            except (ValueError, OverflowError, TypeError) as parse_err:
+                logger.warning(f"[{file_id_for_logs}] Could not parse 'date' string '{current_date_val}': {parse_err}. "
+                               f"Falling back to Drive createdTime.")
+                final_date_dt = self._parse_iso_datetime(drive_created_str) # _parse_iso_datetime handles tokyo_tz
+        else: # Not a datetime, date, or string, or it's None. Use Drive's createdTime.
+            logger.info(f"[{file_id_for_logs}] 'date' field is not a recognized type or is missing. Falling back to Drive createdTime.")
+            final_date_dt = self._parse_iso_datetime(drive_created_str) # _parse_iso_datetime handles tokyo_tz
+
+        # Final fallback: if date is still None (e.g., Drive time was also missing/invalid), use current time.
+        if not isinstance(final_date_dt, datetime):
+            logger.warning(f"[{file_id_for_logs}] 'date' could not be determined from frontmatter or Drive. "
+                           f"Setting to current time.")
+            final_date_dt = datetime.now(self.tokyo_tz)
+        return final_date_dt
+
+    def _determine_lastmod(
+        self,
+        current_lastmod_val: Any,
+        drive_modified_str: Optional[str],
+        fallback_date_dt: datetime, # This must be a timezone-aware datetime object
+        file_id_for_logs: str
+    ) -> datetime:
+        """
+        Determines the 'lastmod' for frontmatter.
+
+        It prioritizes existing valid 'lastmod' from frontmatter, then falls back
+        to Drive's 'modifiedTime', then to the already determined 'date' (which is
+        timezone-aware), and finally to the current time if necessary.
+        Ensures the resulting datetime is timezone-aware using DEFAULT_TIMEZONE.
+
+        Args:
+            current_lastmod_val: The 'lastmod' value from existing frontmatter.
+            drive_modified_str: The 'modifiedTime' string from Google Drive metadata (ISO 8601).
+            fallback_date_dt: The determined 'date' (timezone-aware), used as a fallback.
+            file_id_for_logs: File ID for logging.
+
+        Returns:
+            A timezone-aware datetime object, localized to self.tokyo_tz.
+        """
+        final_lastmod_dt: Optional[datetime] = None
+
+        if isinstance(current_lastmod_val, datetime):
+            final_lastmod_dt = current_lastmod_val
+            if final_lastmod_dt.tzinfo is None or final_lastmod_dt.tzinfo.utcoffset(final_lastmod_dt) is None:
+                logger.warning(f"[{file_id_for_logs}] Existing 'lastmod' ({current_lastmod_val}) is naive. "
+                               f"Assigning default timezone {self.tokyo_tz.key}.")
+                final_lastmod_dt = final_lastmod_dt.replace(tzinfo=self.tokyo_tz)
+            else: # It's aware, convert to the target timezone
+                final_lastmod_dt = final_lastmod_dt.astimezone(self.tokyo_tz)
+        elif isinstance(current_lastmod_val, date):
+            logger.info(f"[{file_id_for_logs}] Frontmatter 'lastmod' is a date object: {current_lastmod_val}. Converting to datetime.")
+            final_lastmod_dt = datetime.combine(current_lastmod_val, datetime.min.time()).replace(tzinfo=self.tokyo_tz)
+        elif isinstance(current_lastmod_val, str):
+            try:
+                lastmod_str_stripped = current_lastmod_val.strip()
+                logger.info(f"[{file_id_for_logs}] Attempting to parse 'lastmod' string '{lastmod_str_stripped}' using dateutil.")
+                dt_parsed = dateutil_parser.parse(lastmod_str_stripped)
+                if dt_parsed.tzinfo is None or dt_parsed.tzinfo.utcoffset(dt_parsed) is None:
+                    logger.warning(f"[{file_id_for_logs}] Parsed 'lastmod' string '{current_lastmod_val}' is naive. "
+                                   f"Assigning default timezone {self.tokyo_tz.key}.")
+                    final_lastmod_dt = dt_parsed.replace(tzinfo=self.tokyo_tz)
+                else: # Parsed date is timezone-aware, convert to DEFAULT_TIMEZONE
+                    logger.info(f"[{file_id_for_logs}] Parsed 'lastmod' string '{current_lastmod_val}' has timezone. Converting to {self.tokyo_tz.key}.")
+                    final_lastmod_dt = dt_parsed.astimezone(self.tokyo_tz)
+            except (ValueError, OverflowError, TypeError) as parse_err:
+                logger.warning(f"[{file_id_for_logs}] Could not parse 'lastmod' string '{current_lastmod_val}': {parse_err}. "
+                               f"Falling back to Drive modifiedTime.")
+                final_lastmod_dt = self._parse_iso_datetime(drive_modified_str) # _parse_iso_datetime handles tokyo_tz
+        else: # Not a datetime, date, or string, or it's None. Use Drive's modifiedTime.
+            logger.info(f"[{file_id_for_logs}] 'lastmod' field is not a recognized type or is missing. Falling back to Drive modifiedTime.")
+            final_lastmod_dt = self._parse_iso_datetime(drive_modified_str) # _parse_iso_datetime handles tokyo_tz
+
+        # Fallback 1: if lastmod is still None, use the determined 'date'.
+        if not isinstance(final_lastmod_dt, datetime):
+            logger.warning(f"[{file_id_for_logs}] 'lastmod' could not be determined from frontmatter or Drive. "
+                           f"Using determined 'date' ({fallback_date_dt}) as fallback.")
+            final_lastmod_dt = fallback_date_dt # fallback_date_dt is already timezone-aware and in tokyo_tz.
+
+        # Final fallback: if lastmod is still somehow not a datetime (should be rare), use current time.
+        if not isinstance(final_lastmod_dt, datetime):
+            logger.error(f"[{file_id_for_logs}] CRITICAL: 'lastmod' is still not a valid datetime after all fallbacks. Using current time.")
+            final_lastmod_dt = datetime.now(self.tokyo_tz)
+        return final_lastmod_dt
+
+    def _set_other_metadata(
+        self,
+        post: frontmatter.Post,
+        file_id: str,
+        file_name: str, # This is the original file name from Drive
+        drive_modified_str: Optional[str]
+    ) -> None:
+        """
+        Sets other standard metadata fields in the frontmatter post object.
+
+        This includes 'title' (if not already set), 'draft' (defaults to False
+        if not set), 'google_drive_id', and 'modifiedTime' (from Drive, used for caching).
+        It also clears any pre-existing 'conversion_error' field.
+
+        Args:
+            post: The frontmatter.Post object to modify.
+            file_id: The Google Drive file ID.
+            file_name: The name of the file from Google Drive, used as a fallback for title.
+            drive_modified_str: The 'modifiedTime' string from Google Drive metadata.
+                                This is stored directly for cache comparison purposes.
+        """
+        if not post.get('title'): # Only set title if it's not in the frontmatter
+            post.metadata['title'] = file_name
+        if 'draft' not in post.metadata: # Default 'draft' to False if not specified
+            post.metadata['draft'] = False
+        post.metadata['google_drive_id'] = file_id
+        # Store the raw 'modifiedTime' from Drive. This is crucial for the caching logic
+        # in `check_cache` to compare against the version on Drive.
+        logger.info(f"[{file_id}] _set_other_metadata: Storing Drive 'modifiedTime' ({drive_modified_str}) for cache key.")
+        post.metadata['modifiedTime'] = drive_modified_str
+        post.metadata.pop('conversion_error', None) # Clear any previous errors
+
     def process_content(
         self, md_content: str, drive_metadata: DriveMetadata
     ) -> Optional[str]:
-        """Parses content, updates frontmatter, converts images."""
-        file_name = drive_metadata.get('name', 'Unknown File') # Retain for internal logic, not direct logging
-        file_id = drive_metadata.get('id', 'Unknown ID')
+        """
+        Parses Markdown content, updates its frontmatter, and converts images.
+
+        Key operations:
+        - Loads frontmatter from the Markdown string.
+        - Sets or updates 'date', 'lastmod', 'title', 'draft', 'google_drive_id',
+          and 'modifiedTime' in the frontmatter.
+        - Converts embedded PNG images to AVIF format.
+        - Handles potential errors during parsing and processing, adding a
+          'conversion_error' field to frontmatter if issues occur.
+        - Unescapes blockquotes at the beginning of lines.
+
+        Args:
+            md_content: The raw Markdown content string.
+            drive_metadata: Metadata dictionary for the Google Drive file.
+
+        Returns:
+            The processed Markdown content string with updated frontmatter,
+            or None if critical parsing errors occur.
+        """
+        # Use descriptive names for logging and metadata population
+        file_name_for_metadata = drive_metadata.get('name', 'Unknown File')
+        file_id_for_logs = drive_metadata.get('id', 'Unknown ID')
 
         try:
             post = frontmatter.loads(md_content)
         except Exception as parse_error:
             logger.critical(
-                f"Failed to parse frontmatter for file ID '{file_id}'. "
-                f'Skipping modification. Error: {parse_error}'
+                f"[{file_id_for_logs}] Failed to parse frontmatter from downloaded content. "
+                f'Skipping all processing for this file. Error: {parse_error}'
             )
-            return None
+            return None # Critical error, cannot proceed with this file
 
         drive_created_str = drive_metadata.get('createdTime')
         drive_modified_str = drive_metadata.get('modifiedTime')
 
-        # Determine 'date' using dateutil.parser for flexibility
-        current_date_val = post.get('date')
-        final_date_dt: Optional[datetime] = None
-        if isinstance(current_date_val, datetime): # Handle existing datetime objects
-            final_date_dt = current_date_val
-            if final_date_dt.tzinfo is None: # Ensure timezone awareness
-                 logger.warning(f"Existing date '{current_date_val}' is naive. "
-                                f"Assigning default timezone {DEFAULT_TIMEZONE}.")
-                 final_date_dt = final_date_dt.replace(tzinfo=self.tokyo_tz)
-            else: # Convert to target timezone if different
-                 final_date_dt = final_date_dt.astimezone(self.tokyo_tz)
-        elif isinstance(current_date_val, date): # Handle date objects (from YYYY-MM-DD)
-             logger.info(f"Frontmatter provided date object: {current_date_val}. Converting to datetime.")
-             # Combine date with midnight time and add default timezone
-             final_date_dt = datetime.combine(current_date_val, datetime.min.time()).replace(tzinfo=self.tokyo_tz)
-        elif isinstance(current_date_val, str): # Handle string values
-            try:
-                # Use dateutil.parser.parse for flexible parsing after stripping whitespace
-                date_str_stripped = current_date_val.strip()
-                logger.info(f"Attempting to parse stripped date string '{date_str_stripped}' using dateutil.")
-                # default=datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-                # can be used if only date is provided, but let's handle timezone explicitly
-                dt_parsed = dateutil_parser.parse(date_str_stripped)
+        # Determine and set date-related frontmatter.
+        # These methods return timezone-aware datetime objects (localized to self.tokyo_tz).
+        # They are stored as datetime objects in post.metadata initially.
+        # They will be formatted to strings just before dumping the frontmatter.
+        post.metadata['date'] = self._determine_date(
+            post.get('date'), drive_created_str, file_id_for_logs
+        )
+        post.metadata['lastmod'] = self._determine_lastmod(
+            post.get('lastmod'), drive_modified_str, post.metadata['date'], file_id_for_logs
+        )
 
-                # Handle timezone: if naive, assume default; if aware, convert
-                if dt_parsed.tzinfo is None or dt_parsed.tzinfo.utcoffset(dt_parsed) is None:
-                    logger.warning(f"Parsed date '{current_date_val}' is naive. "
-                                   f"Assigning default timezone {DEFAULT_TIMEZONE}.")
-                    final_date_dt = dt_parsed.replace(tzinfo=self.tokyo_tz)
-                else:
-                    logger.info(f"Parsed date '{current_date_val}' has timezone. Converting to {DEFAULT_TIMEZONE}.")
-                    final_date_dt = dt_parsed.astimezone(self.tokyo_tz)
+        # Set other non-date metadata fields (title, draft, google_drive_id, modifiedTime for cache)
+        self._set_other_metadata(
+            post, file_id_for_logs, file_name_for_metadata, drive_modified_str
+        )
 
-            except (ValueError, OverflowError, TypeError) as parse_err:
-                logger.warning(f"Could not parse existing date string '{current_date_val}' "
-                               f"using dateutil: {parse_err}. Falling back to Drive createdTime.")
-                final_date_dt = self._parse_iso_datetime(drive_created_str)
-        else: # Not datetime or string, use Drive time
-            final_date_dt = self._parse_iso_datetime(drive_created_str)
-
-        # Fallback if date is still None after all attempts
-        if not isinstance(final_date_dt, datetime):
-            logger.warning(f"Setting date to current time for file ID '{file_id}' "
-                           f"(could not determine from frontmatter or Drive).")
-            final_date_dt = datetime.now(self.tokyo_tz)
-        post.metadata['date'] = final_date_dt # Store as datetime object for now
-
-        # Determine 'lastmod' (similar logic to date, using modifiedTime as fallback)
-        current_lastmod_val = post.get('lastmod')
-        final_lastmod_dt: Optional[datetime] = None
-        if isinstance(current_lastmod_val, datetime): # Handle existing datetime objects
-            final_lastmod_dt = current_lastmod_val
-            if final_lastmod_dt.tzinfo is None: # Ensure timezone awareness
-                 logger.warning(f"Existing lastmod '{current_lastmod_val}' is naive. "
-                                f"Assigning default timezone {DEFAULT_TIMEZONE}.")
-                 final_lastmod_dt = final_lastmod_dt.replace(tzinfo=self.tokyo_tz)
-            else: # Convert to target timezone if different
-                 final_lastmod_dt = final_lastmod_dt.astimezone(self.tokyo_tz)
-        elif isinstance(current_lastmod_val, date): # Handle date objects (from YYYY-MM-DD)
-             logger.info(f"Frontmatter provided lastmod date object: {current_lastmod_val}. Converting to datetime.")
-             # Combine date with midnight time and add default timezone
-             final_lastmod_dt = datetime.combine(current_lastmod_val, datetime.min.time()).replace(tzinfo=self.tokyo_tz)
-        elif isinstance(current_lastmod_val, str): # Handle string values
-            try:
-                # Use dateutil.parser.parse for flexible parsing after stripping whitespace
-                lastmod_str_stripped = current_lastmod_val.strip()
-                logger.info(f"Attempting to parse stripped lastmod string '{lastmod_str_stripped}' using dateutil.")
-                dt_parsed = dateutil_parser.parse(lastmod_str_stripped)
-
-                # Handle timezone: if naive, assume default; if aware, convert
-                if dt_parsed.tzinfo is None or dt_parsed.tzinfo.utcoffset(dt_parsed) is None:
-                    logger.warning(f"Parsed lastmod '{current_lastmod_val}' is naive. "
-                                   f"Assigning default timezone {DEFAULT_TIMEZONE}.")
-                    final_lastmod_dt = dt_parsed.replace(tzinfo=self.tokyo_tz)
-                else:
-                    logger.info(f"Parsed lastmod '{current_lastmod_val}' has timezone. Converting to {DEFAULT_TIMEZONE}.")
-                    final_lastmod_dt = dt_parsed.astimezone(self.tokyo_tz)
-
-            except (ValueError, OverflowError, TypeError) as parse_err:
-                logger.warning(f"Could not parse existing lastmod string '{current_lastmod_val}' "
-                               f"using dateutil: {parse_err}. Falling back to Drive modifiedTime.")
-                final_lastmod_dt = self._parse_iso_datetime(drive_modified_str)
-        else: # Not datetime or string, use Drive time
-            final_lastmod_dt = self._parse_iso_datetime(drive_modified_str)
-
-        # Fallback if lastmod is still None after all attempts
-        if not isinstance(final_lastmod_dt, datetime):
-            logger.warning(f"Setting lastmod to final date value for file ID '{file_id}' "
-                           f"(could not determine from frontmatter or Drive).")
-            # Use the determined date as fallback, ensuring it's a datetime
-            if isinstance(final_date_dt, datetime):
-                final_lastmod_dt = final_date_dt
-            else: # Should not happen due to date fallback, but safety check
-                logger.error(f"Cannot set lastmod fallback for file ID {file_id} as date is not valid.")
-                final_lastmod_dt = datetime.now(self.tokyo_tz) # Ultimate fallback
-        post.metadata['lastmod'] = final_lastmod_dt # Store as datetime object for now
-
-        # Set other metadata
-        if not post.get('title'): post.metadata['title'] = file_name
-        if 'draft' not in post.metadata: post.metadata['draft'] = False
-        post.metadata['google_drive_id'] = file_id
-        logger.info(f"[{file_id}] process_content: Setting metadata 'modifiedTime' to Drive's value: '{drive_modified_str}'")
-        post.metadata['modifiedTime'] = drive_modified_str
-        post.metadata.pop('conversion_error', None) # Clear previous errors
-
-        # Process images
+        # Process images (convert to AVIF, resize)
         try:
             post.content = self._process_images(post.content)
         except Exception as img_err:
-            logger.exception(f"Error during image processing for file ID '{file_id}'")
+            logger.exception(f"[{file_id_for_logs}] Error during image processing.")
+            # Record error in frontmatter but continue processing if possible,
+            # as text content might still be valuable.
             post.metadata['conversion_error'] = f'Image processing error: {img_err}'
 
-        # Replace escaped blockquotes at the beginning of lines
+        # Replace escaped blockquotes (e.g., "\> quote" to "> quote")
+        # that Google Docs sometimes exports.
         try:
-            logger.info(f"[{file_id}] Replacing escaped blockquotes '^\\> ' with '> ' at the beginning of lines")
+            logger.info(f"[{file_id_for_logs}] Replacing escaped blockquotes '^\\> ' with '> '.")
             post.content = re.sub(r'^\\> ', '> ', post.content, flags=re.MULTILINE)
         except Exception as e:
-            logger.exception(f"Error replacing escaped blockquotes for file ID '{file_id}': {e}")
-            # Optionally, add a note to metadata if this specific step fails
-            post.metadata['conversion_error'] = post.metadata.get('conversion_error', '') + f'; Blockquote unescaping error: {e}'
+            logger.exception(f"[{file_id_for_logs}] Error replacing escaped blockquotes.")
+            current_error = post.metadata.get('conversion_error', '')
+            post.metadata['conversion_error'] = f"{current_error}; Blockquote unescaping error: {e}".strip('; ')
 
-        # Format dates and dump
+
+        # Finalize: Format datetime objects to strings for YAML serialization and dump frontmatter
         try:
+            # Convert 'date' and 'lastmod' (which are datetime objects) to formatted strings.
             post.metadata['date'] = self._format_datetime(post.metadata.get('date'))
             post.metadata['lastmod'] = self._format_datetime(post.metadata.get('lastmod'))
+
+            # Remove any metadata fields that ended up as None (e.g., if date formatting failed).
+            # This keeps the YAML clean.
             post.metadata = {k: v for k, v in post.metadata.items() if v is not None}
 
-            # Log the modifiedTime value just before dumping
-            final_modified_time_in_metadata = post.metadata.get('modifiedTime')
-            logger.info(f"[{file_id}] process_content: 'modifiedTime' in metadata before dump: '{final_modified_time_in_metadata}' (type: {type(final_modified_time_in_metadata)})")
+            logger.info(f"[{file_id_for_logs}] Metadata before final dump: {post.metadata}")
+            return frontmatter.dumps(post)
 
-            dumped_content = frontmatter.dumps(post)
-
-            # Log the modifiedTime from the dumped string (for verification)
-            try:
-                # Quick check if the dumped string contains the expected modifiedTime
-                # This is a simple check; a more robust check might involve parsing the dumped YAML
-                if isinstance(final_modified_time_in_metadata, str):
-                    expected_fm_line = f"modifiedTime: '{final_modified_time_in_metadata}'" # Note: python-frontmatter might not quote if not needed
-                    expected_fm_line_alt = f"modifiedTime: {final_modified_time_in_metadata}"
-                    if expected_fm_line in dumped_content or expected_fm_line_alt in dumped_content :
-                        logger.info(f"[{file_id}] process_content: Verified 'modifiedTime' seems present as expected in dumped content.")
-                    else:
-                        # Extract the actual modifiedTime line from dumped content for logging
-                        actual_mt_line = "Not found or complex structure"
-                        for line in dumped_content.splitlines():
-                            if line.startswith("modifiedTime:"):
-                                actual_mt_line = line
-                                break
-                        logger.warning(f"[{file_id}] process_content: 'modifiedTime' in dumped content might differ or not be found as simple string. Actual line: '{actual_mt_line}'")
-            except Exception as log_dump_err:
-                logger.warning(f"[{file_id}] process_content: Could not verify 'modifiedTime' in dumped string due to: {log_dump_err}")
-
-            return dumped_content
         except Exception as dump_error:
             logger.critical(
-                f"[{file_id}] Failed to dump final frontmatter for file ID '{file_id}'. Error: {dump_error}"
+                f"[{file_id_for_logs}] Failed to dump final frontmatter and content. Error: {dump_error}"
             )
-            error_content = (
-                f"---\n"
-                f"title: {post.metadata.get('title', 'ERROR')}\n"
-                f"google_drive_id: {file_id}\n"
-                f"modifiedTime: {drive_modified_str or 'ERROR'}\n"
-                f"conversion_error: 'CRITICAL DUMP ERROR - {dump_error}'\n"
-                f"---\n\n{post.content}"
-            )
-            return error_content
+            # If dumping fails, create a minimal frontmatter with the error.
+            # This ensures the file still contains some context if it's created/overwritten.
+            error_fm = {
+                'title': post.metadata.get('title', f"Error Processing {file_id_for_logs}"),
+                'google_drive_id': file_id_for_logs,
+                'modifiedTime': drive_modified_str or 'Unknown', # For cache check consistency
+                'conversion_error': f'CRITICAL DUMP ERROR: {dump_error}'
+            }
+            # Use a new Frontmatter.Post object for error content to avoid issues
+            # with the original 'post' object's state which might be complex.
+            error_post = frontmatter.Post(content=post.content, **error_fm) # Preserve original content if possible
+            return frontmatter.dumps(error_post)
 
     def save_markdown(self, file_id: str, content: str) -> bool:
         """Saves the final markdown content to the local file system."""
@@ -699,12 +861,24 @@ class MarkdownProcessor:
 def process_single_file_task(
     drive_metadata: DriveMetadata, output_dir_str: str
 ) -> Tuple[ProcessStatus, bool]:
-    """Wrapper function executed by each process in a ProcessPoolExecutor.
+    """
+    Processes a single Google Drive file.
+
+    This function is designed to be run in a separate process by a
+    ProcessPoolExecutor. It handles initialization of clients, cache checking,
+    downloading, content processing, and saving for a single file.
+
+    Args:
+        drive_metadata: Metadata of the Google Drive file to process.
+        output_dir_str: The absolute path to the output directory as a string.
 
     Returns:
-        Tuple[ProcessStatus, bool]: (status, is_draft)
-                                    is_draft is True if the file is a draft,
-                                    False otherwise. Defaults to True on errors.
+        A tuple containing:
+            - ProcessStatus: A string indicating the outcome of the processing
+                             (e.g., 'success', 'skipped', 'download_error').
+            - bool: True if the processed file is a draft, False otherwise.
+                    Defaults to True if an error occurs before draft status
+                    can be determined.
     """
     file_id = drive_metadata.get('id')
     drive_modified_time = drive_metadata.get('modifiedTime')
@@ -749,7 +923,10 @@ def process_single_file_task(
                 f"[{file_id}] Could not parse frontmatter from processed content "
                 f"to get draft status. Assuming draft=False for safety if processed."
             )
-            is_draft = False # If content was processed, assume not draft if unspecified
+            # If content was processed but draft status can't be parsed from it,
+            # assume it's not a draft. This is safer than assuming it IS a draft,
+            # as it means content might go public rather than being hidden.
+            is_draft = False
 
         if processor.save_markdown(file_id, processed_content_str):
             return 'success', is_draft
@@ -761,17 +938,156 @@ def process_single_file_task(
         return 'unknown_error', True # Default to draft on major error
 
 
+# --- Helper Functions for Main ---
+
+def _synchronize_local_files(output_path: Path, current_drive_ids: set[str]) -> int:
+    """
+    Synchronizes local Markdown files with the current list of Drive file IDs.
+
+    Deletes local files that are no longer present in Google Drive.
+    It also determines if any of the deleted files were 'public' (not draft).
+
+    Args:
+        output_path: The local directory where Markdown files are stored.
+        current_drive_ids: A set of Google Drive file IDs that currently exist.
+
+    Returns:
+        The number of public (non-draft) files that were deleted locally.
+    """
+    logger.info(f'Checking local files in {output_path.resolve()} for cleanup...')
+    deleted_public_files_count = 0
+
+    if not output_path.exists():
+        logger.info('Output directory does not exist, skipping cleanup.')
+        return 0
+
+    local_md_files_paths = list(output_path.glob('*.md'))
+    # Stores metadata for local files: {'file_id': {'path': Path, 'is_draft': bool}}
+    local_files_metadata: Dict[str, Dict[str, Any]] = {}
+
+    for local_path_obj in local_md_files_paths:
+        file_id = local_path_obj.stem
+        # Basic check for Drive ID format (alphanumeric, hyphens, underscores)
+        if re.match(r'^[a-zA-Z0-9_-]+$', file_id):
+            is_draft = True # Default to draft if parsing frontmatter fails
+            try:
+                with open(local_path_obj, 'r', encoding='utf-8') as f:
+                    post = frontmatter.load(f)
+                    is_draft = post.get('draft', False)
+                local_files_metadata[file_id] = {'path': local_path_obj, 'is_draft': is_draft}
+            except Exception as e:
+                logger.warning(
+                    f"Could not read/parse {local_path_obj} to get draft status "
+                    f"during cleanup pre-check: {e}. Assuming draft."
+                )
+                local_files_metadata[file_id] = {'path': local_path_obj, 'is_draft': True}
+        else:
+            logger.warning(
+                f'Found local file with unexpected name format: '
+                f'{local_path_obj.name}. Skipping cleanup consideration.'
+            )
+
+    local_file_ids_on_disk = set(local_files_metadata.keys())
+    ids_to_delete_from_disk = local_file_ids_on_disk - current_drive_ids
+
+    if ids_to_delete_from_disk:
+        logger.info(f'Found {len(ids_to_delete_from_disk)} local files to delete:')
+        for file_id_to_delete in ids_to_delete_from_disk:
+            metadata = local_files_metadata.get(file_id_to_delete)
+            if metadata:
+                local_file_path_to_delete = metadata['path']
+                was_public = not metadata['is_draft']
+                logger.info(f'  - Deleting {local_file_path_to_delete.name} (was_public: {was_public})')
+                if was_public:
+                    deleted_public_files_count += 1
+                try:
+                    local_file_path_to_delete.unlink()
+                except OSError as e:
+                    logger.error(f'    Error deleting file {local_file_path_to_delete}: {e}')
+            else:
+                # This case should ideally not be reached if logic is correct.
+                logger.warning(
+                    f"Attempted to delete file ID {file_id_to_delete} but its "
+                    f"metadata was not pre-scanned. Skipping deletion."
+                )
+    else:
+        logger.info('No local files need deletion.')
+    return deleted_public_files_count
+
+
+def _handle_marker_file(public_content_changed: bool, deleted_public_files_count: int) -> None:
+    """
+    Creates or removes a .content-updated marker file.
+
+    This marker file is used by downstream processes (e.g., a deployment script)
+    to determine if there were changes to public content that warrant a new deployment.
+
+    Args:
+        public_content_changed: True if any non-draft content was successfully
+                                updated or created during the main processing.
+        deleted_public_files_count: The number of public files deleted during local sync.
+    """
+    # Marker creation condition:
+    # Deploy if any non-draft content was successfully updated/created OR if any public file was deleted.
+    should_create_marker = public_content_changed or (deleted_public_files_count > 0)
+    marker_file = Path('.content-updated')
+
+    logger.info(
+        f"Marker logic: public_content_changed: {public_content_changed}, "
+        f"deleted_public_files_count: {deleted_public_files_count}, "
+        f"should_create_marker: {should_create_marker}"
+    )
+
+    if should_create_marker:
+        logger.info("Public content updated or public file deleted. Creating marker file '.content-updated'...")
+        try:
+            marker_file.touch()
+            if marker_file.exists():
+                 logger.info("Successfully created marker file.")
+            else:
+                 # This state (touched but not existing) is unlikely but good to log.
+                 logger.error("Marker file creation attempted but file does not exist afterwards.")
+        except OSError as e:
+            logger.error(f"Failed to create marker file '.content-updated': {e}")
+    else:
+        logger.info("No public content updates or public file deletions. Marker file will not be created/will be removed if it exists.")
+        if marker_file.exists():
+             logger.info("Attempting to remove existing marker file as no relevant updates occurred...")
+             try:
+                 marker_file.unlink()
+                 logger.info("Successfully removed existing marker file.")
+             except OSError as e:
+                 logger.warning(f"Could not remove existing marker file '.content-updated': {e}")
+
+
 # --- Main Execution ---
 
 def main() -> None:
-    """Main function to orchestrate the document conversion process."""
+    """
+    Main function to orchestrate the Google Docs to Markdown conversion process.
+
+    Steps:
+    1. Initializes environment (reads parent folder ID, sets up output path).
+    2. Initializes GoogleDriveClient.
+    3. Lists all Google Docs from the specified Drive folder.
+    4. Syncs local files: deletes local Markdown files that no longer exist in Drive.
+    5. Processes each Drive file in parallel using ProcessPoolExecutor:
+        - Checks local cache against Drive modification time.
+        - If necessary, downloads the doc as Markdown.
+        - Processes the Markdown (frontmatter, image conversion).
+        - Saves the final Markdown to the local file system.
+    6. Logs a summary of the conversion process.
+    7. Creates or removes a '.content-updated' marker file based on whether
+       public (non-draft) content was changed.
+    8. Exits with appropriate status code (0 for success, 1 for failures).
+    """
     start_time = time.time()
     logger.info(f'Starting Google Docs to Markdown conversion at {datetime.now()}...')
 
     parent_folder_id = os.getenv('GOOGLE_DRIVE_PARENT_ID')
     if not parent_folder_id:
         logger.critical('GOOGLE_DRIVE_PARENT_ID environment variable is not set.')
-        exit(1)
+        sys.exit(1)
 
     logger.info(f'Target Parent Folder ID: {parent_folder_id}')
     output_path = Path(OUTPUT_SUBDIR)
@@ -782,62 +1098,18 @@ def main() -> None:
         initial_client = GoogleDriveClient()
     except RuntimeError as e:
         logger.critical(f'Failed to initialize Google Drive client: {e}')
-        exit(1)
+        sys.exit(1)
 
     drive_files: List[DriveMetadata] = initial_client.list_google_docs(parent_folder_id)
-    current_drive_ids = {f['id'] for f in drive_files if f.get('id')}
+    current_drive_ids = {f['id'] for f in drive_files if f.get('id') if f.get('id')} # Ensure id is not None
     logger.info(f'Found {len(current_drive_ids)} unique file IDs in Google Drive.')
 
-    # Sync local files
-    logger.info(f'Checking local files in {output_path.resolve()} for cleanup...')
-    deleted_public_files_count = 0
+    # Synchronize local files with Google Drive and count deleted public files
+    deleted_public_files_count = _synchronize_local_files(output_path, current_drive_ids)
 
-    if output_path.exists():
-        local_md_files_paths = list(output_path.glob('*.md'))
-        local_files_metadata: Dict[str, Dict[str, Any]] = {} # Store {'file_id': {'path': Path, 'is_draft': bool}}
-
-        for local_path_obj in local_md_files_paths:
-            file_id = local_path_obj.stem
-            if re.match(r'^[a-zA-Z0-9_-]+$', file_id): # Basic check for Drive ID format
-                is_draft = True # Default to draft if parsing fails
-                try:
-                    with open(local_path_obj, 'r', encoding='utf-8') as f:
-                        post = frontmatter.load(f)
-                        is_draft = post.get('draft', False)
-                    local_files_metadata[file_id] = {'path': local_path_obj, 'is_draft': is_draft}
-                except Exception as e:
-                    logger.warning(f"Could not read/parse {local_path_obj} to get draft status during cleanup pre-check: {e}. Assuming draft.")
-                    local_files_metadata[file_id] = {'path': local_path_obj, 'is_draft': True} # Assume draft
-            else:
-                logger.warning(f'Found local file with unexpected name format: {local_path_obj.name}. Skipping cleanup consideration.')
-
-        local_file_ids_on_disk = set(local_files_metadata.keys())
-        ids_to_delete_from_disk = local_file_ids_on_disk - current_drive_ids
-
-        if ids_to_delete_from_disk:
-            logger.info(f'Found {len(ids_to_delete_from_disk)} local files to delete:')
-            for file_id_to_delete in ids_to_delete_from_disk:
-                metadata = local_files_metadata.get(file_id_to_delete)
-                if metadata:
-                    local_file_path_to_delete = metadata['path']
-                    was_public = not metadata['is_draft']
-                    logger.info(f'  - Deleting {local_file_path_to_delete.name} (was_public: {was_public})')
-                    if was_public:
-                        deleted_public_files_count += 1
-                    try:
-                        local_file_path_to_delete.unlink()
-                    except OSError as e:
-                        logger.error(f'    Error deleting file {local_file_path_to_delete}: {e}')
-                else:
-                    # Should not happen if logic is correct, but as a safeguard:
-                    logger.warning(f"Attempted to delete file ID {file_id_to_delete} but its metadata was not pre-scanned. Skipping deletion.")
-        else:
-            logger.info('No local files need deletion.')
-    else:
-        logger.info('Output directory does not exist, skipping cleanup.')
-
-    if not drive_files and deleted_public_files_count == 0: # Also check if a public file was deleted
-        logger.info('No Google Docs found to process and no public files deleted.')
+    # Early exit if no files to process and no public files were deleted (idempotency)
+    if not drive_files and deleted_public_files_count == 0:
+        logger.info('No Google Docs found to process and no public files were deleted. Conversion finished.')
         logger.info('Conversion finished.')
         return
 
@@ -851,6 +1123,8 @@ def main() -> None:
     output_dir_abs_str = str(output_path.resolve())
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
+        # output_dir_abs_str is used because Path objects may not be picklable
+        # across processes, but string paths are.
         future_to_file_meta: Dict[concurrent.futures.Future[Tuple[ProcessStatus, bool]], DriveMetadata] = {
             executor.submit(process_single_file_task, meta, output_dir_abs_str): meta
             for meta in drive_files
@@ -903,47 +1177,18 @@ def main() -> None:
     # Exit Status
     if results['failed'] > 0:
         logger.error('Exiting with error code 1 due to processing failures.')
-        exit_code = 1
+        sys.exit(1) # Exit with error code if there were failures
     else:
         logger.info('Conversion completed successfully.')
-        exit_code = 0
+        # exit_code = 0 # No need to set exit_code if we sys.exit(0) later
 
     # --- Marker File Logic ---
-    public_content_processed_and_not_draft = results['public_updated'] > 0
+    # Determine if any public (non-draft) content was processed or deleted.
+    public_content_changed = results['public_updated'] > 0
+    _handle_marker_file(public_content_changed, deleted_public_files_count)
 
-    # Marker creation condition:
-    # Deploy if any non-draft content was successfully updated/created OR if any public file was deleted.
-    should_create_marker = public_content_processed_and_not_draft or (deleted_public_files_count > 0)
-
-    marker_file = Path('.content-updated')
-    logger.info(
-        f"Marker logic check: public_content_processed_not_draft: {public_content_processed_and_not_draft}, "
-        f"deleted_public_files_count: {deleted_public_files_count}, "
-        f"should_create_marker: {should_create_marker}"
-    )
-
-    if should_create_marker:
-        logger.info("Public content updated or public file deleted. Attempting to create marker file '.content-updated'...")
-        try:
-            marker_file.touch()
-            if marker_file.exists():
-                 logger.info("Successfully created marker file.")
-            else:
-                 logger.error("Marker file creation attempted but file does not exist afterwards.")
-        except OSError as e:
-            logger.error(f"Failed to create marker file: {e}")
-    else:
-        logger.info("No public content updates or public file deletions detected, marker file will not be created/will be removed.")
-        if marker_file.exists():
-             logger.info("Attempting to remove existing marker file as no relevant updates occurred...")
-             try:
-                 marker_file.unlink()
-                 logger.info("Successfully removed existing marker file.")
-             except OSError as e:
-                 logger.warning(f"Could not remove existing marker file: {e}")
-
-    logger.info(f"Exiting with code: {exit_code}")
-    exit(exit_code)
+    logger.info("Exiting with code: 0 (Success)")
+    sys.exit(0)
 
 
 if __name__ == '__main__':
