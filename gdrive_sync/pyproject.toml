@@ -6,8 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "google-api-python-client>=2.167.0",
-    "Pillow>=10.0.0", # Explicitly add Pillow dependency
-    "pillow-avif-plugin>=1.5.1",
+    "Pillow>=10.0.0", # Pillow 10+ has built-in AVIF support
     "python-frontmatter>=1.1.0",
     "google-auth-httplib2>=0.1.0", # Added for AuthorizedHttp
     "httplib2>=0.20.0", # Added as dependency for google-auth-httplib2 and direct use

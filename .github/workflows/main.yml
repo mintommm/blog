@@ -49,10 +49,18 @@ jobs:
     - name: Install uv
       run: python -m pip install --upgrade pip uv
 
-    # Python依存関係のインストール (uvを使用し、gdrive_sync/pyproject.toml に基づく)
-    - name: Install Python dependencies with uv
-      run: uv pip install . --system # pyproject.toml を元に依存関係をシステムPython環境にインストール
-      working-directory: gdrive_sync # gdrive_sync ディレクトリ内で実行
+    # Install libavif-dev for Pillow AVIF support
+    # This step is crucial for Pillow to be able to build with AVIF capabilities.
+    # It should be done before Pillow (or any package depending on it) is installed.
+    - name: Install libavif for Pillow AVIF support
+      run: sudo apt-get update && sudo apt-get install -y libavif-dev
+
+    # Python依存関係のインストール (uvを使用し、gdrive_sync/uv.lock に基づく)
+    # 注意: gdrive_sync/uv.lock ファイルは事前に `uv pip compile gdrive_sync/pyproject.toml -o gdrive_sync/uv.lock` コマンド等で生成し、
+    # リポジトリにコミットしておく必要があります。このロックファイルを元に依存関係を再現します。
+    - name: Install Python dependencies with uv using lock file
+      run: uv pip sync --system gdrive_sync/uv.lock # uv.lock を元に依存関係をシステムPython環境にインストール
+      # working-directory は不要。uv.lockへのパスを直接指定するため。
 
     # コンテンツキャッシュの復元 (手動実行で ignore_cache が true の場合はスキップ)
     - name: Restore content cache
