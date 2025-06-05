@@ -28,7 +28,7 @@ from dateutil.tz import tzutc # Import tzutc for timezone handling
 import frontmatter
 import google.auth
 import httplib2
-import PIL # Pillow library
+from PIL import Image, UnidentifiedImageError # Pillow library for image processing
 # import pillow_avif # No longer explicitly needed if Pillow >= 10.0.0 handles AVIF well
 from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build, Resource
@@ -443,10 +443,10 @@ class MarkdownProcessor:
         try:
             img_part = base64_img_data.removeprefix(expected_prefix)
             img_binary = base64.b64decode(img_part)
-            img = PIL.Image.open(io.BytesIO(img_binary))
+            img = Image.open(io.BytesIO(img_binary))
 
             if img.mode == 'RGBA':
-                bg = PIL.Image.new('RGB', img.size, (255, 255, 255))
+                bg = Image.new('RGB', img.size, (255, 255, 255))
                 alpha = img.split()[-1]
                 bg.paste(img, mask=alpha)
                 img = bg
@@ -458,7 +458,7 @@ class MarkdownProcessor:
                 new_height = round(IMAGE_WIDTH * aspect_ratio)
                 logger.info(f'Resizing image from {img.width}x{img.height} to '
                             f'{IMAGE_WIDTH}x{new_height}')
-                img = img.resize((IMAGE_WIDTH, new_height), PIL.Image.LANCZOS)
+                img = img.resize((IMAGE_WIDTH, new_height), Image.Resampling.LANCZOS)
 
             output_buffer = io.BytesIO()
             img.save(
@@ -472,8 +472,8 @@ class MarkdownProcessor:
             ).decode('utf-8')
             return f'data:image/{IMAGE_FORMAT};base64,{encoded_new_format}'
 
-        except PIL.UnidentifiedImageError:
-            logger.error('Could not identify image format. Skipping conversion.')
+        except UnidentifiedImageError: # More specific exception from Pillow
+            logger.error('Could not identify image format (Pillow UnidentifiedImageError). Skipping conversion.')
             return base64_img_data
         except Exception as e:
             logger.exception('Error converting image. Skipping conversion.')
