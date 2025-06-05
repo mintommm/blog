@@ -335,27 +335,58 @@ class MarkdownProcessor:
                 with open(local_path, 'r', encoding='utf-8') as f:
                     local_post = frontmatter.load(f)
                 local_modified_time_str = local_post.get('modifiedTime')
-                is_draft = local_post.get('draft', False) # Get draft status
+                # Determine is_draft early, as it's needed if we return early from datetime comparison
+                is_draft = local_post.get('draft', False)
                 logger.info(f"[{file_id}] check_cache: Local modifiedTime from frontmatter (str): '{local_modified_time_str}' (type: {type(local_modified_time_str)})")
                 logger.info(f"[{file_id}] check_cache: Local draft status: {is_draft}")
 
-                comparison_result = (local_modified_time_str == drive_modified_time_str)
-                logger.info(f"[{file_id}] check_cache: Comparison (local == drive): {comparison_result}")
+                # Datetime comparison logic
+                logger.info(f"[{file_id}] check_cache: Attempting datetime comparison for modifiedTimes.")
+                try:
+                    if local_modified_time_str and drive_modified_time_str: # Ensure neither is None or empty
+                        local_dt = dateutil_parser.isoparse(local_modified_time_str)
+                        drive_dt = dateutil_parser.isoparse(drive_modified_time_str)
 
-                if (local_modified_time_str and comparison_result):
-                    logger.info(f"[{file_id}] Skipping: Local 'modifiedTime' matches Drive's.")
-                    return True, is_draft # Skip, return its draft status
-                elif not local_modified_time_str:
+                        # Ensure timezone awareness for comparison, assuming UTC if naive
+                        # Drive times are 'Z', local should also be ISO with offset or 'Z'
+                        if local_dt.tzinfo is None or local_dt.tzinfo.utcoffset(local_dt) is None:
+                            logger.warning(f"[{file_id}] check_cache: Local datetime '{local_modified_time_str}' is naive, assuming UTC for comparison.")
+                            local_dt = local_dt.replace(tzinfo=tzutc())
+                        if drive_dt.tzinfo is None or drive_dt.tzinfo.utcoffset(drive_dt) is None:
+                            # This case should be less common for Drive times if they are proper ISO
+                            logger.warning(f"[{file_id}] check_cache: Drive datetime '{drive_modified_time_str}' is naive, assuming UTC for comparison.")
+                            drive_dt = drive_dt.replace(tzinfo=tzutc())
+
+                        if local_dt == drive_dt:
+                            logger.info(f"[{file_id}] check_cache: Datetime comparison matches: Local ({local_dt}) == Drive ({drive_dt}). Skipping.")
+                            return True, is_draft
+                        else:
+                            logger.info(f"[{file_id}] check_cache: Datetime comparison mismatch: Local ({local_dt}) != Drive ({drive_dt}). Proceeding to string comparison as fallback/verification.")
+                    elif not local_modified_time_str:
+                        logger.info(f"[{file_id}] check_cache: Local modifiedTime is missing or empty. Skipping datetime comparison.")
+                    # drive_modified_time_str being None/empty is handled by the initial check in the function
+
+                except Exception as e_parse:
+                    logger.warning(f"[{file_id}] check_cache: Datetime parsing/comparison failed: {e_parse}. Falling back to string comparison.")
+
+                # Fallback to string comparison
+                comparison_result = (local_modified_time_str == drive_modified_time_str)
+                logger.info(f"[{file_id}] check_cache: String comparison result (local == drive): {comparison_result}")
+
+                if (local_modified_time_str and comparison_result): # Check local_modified_time_str again in case it was None
+                    logger.info(f"[{file_id}] Skipping: Local 'modifiedTime' (string) matches Drive's.")
+                    return True, is_draft
+                elif not local_modified_time_str: # This condition might have been logged above if datetime comparison was skipped
                     logger.warning(
-                        f"[{file_id}] Local 'modifiedTime' not found in {local_path}. Forcing update."
+                        f"[{file_id}] Local 'modifiedTime' not found in {local_path} (checked after datetime attempt). Forcing update."
                     )
-                else: # Exists but does not match
-                    logger.warning(
-                        f"[{file_id}] Local 'modifiedTime' ('{local_modified_time_str}') does not match Drive's ('{drive_modified_time_str}'). Forcing update."
+                else: # Exists but does not match (either by datetime or string)
+                    logger.info( # Changed to info as mismatch is expected if datetimes didn't match
+                        f"[{file_id}] Local 'modifiedTime' ('{local_modified_time_str}') does not match Drive's ('{drive_modified_time_str}') after all checks. Forcing update."
                     )
-            except Exception as e:
+            except Exception as e: # General exception for reading local file
                 logger.warning(
-                    f'[{file_id}] Error reading or parsing local file {local_path}: {e}. '
+                    f'[{file_id}] Error reading or parsing local file {local_path} (outer try-except): {e}. '
                     f'Forcing update.'
                 )
         else:
