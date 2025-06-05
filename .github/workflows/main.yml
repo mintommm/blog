@@ -51,7 +51,6 @@ jobs:
 
     # Install libavif-dev for Pillow AVIF support
     # This is required for Pillow to build with AVIF capabilities, as libavif-dev
-    # is not included in the base GitHub Actions runner images.
     # This step should be done before Pillow (or any package depending on it) is installed.
     - name: Install libavif for Pillow AVIF support
       run: sudo apt-get update && sudo apt-get install -y libavif-dev
