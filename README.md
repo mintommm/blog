@@ -11,6 +11,7 @@ GitHub Actions を利用して定期的に Google Drive をチェックし、変
 *   Google Docs から Markdown への自動変換
 *   フロントマター（日付、タイトル等）の自動設定・更新
 *   埋め込み PNG 画像の AVIF 形式への自動変換・リサイズ
+*   Google Docs 内のHugoショートコードのエスケープ自動修正
 *   Google Drive の更新に基づいた差分更新（キャッシュ利用）
 *   Google Drive 側でのファイル削除・移動の自動反映（ローカルファイルの削除）
 *   GitHub Actions による定期実行・手動実行
@@ -58,6 +59,7 @@ Google Drive からコンテンツを取得し、Hugo 用に処理するコア�
         *   `google_drive_id`: 対応する Google Drive ファイル ID を記録。
         *   `modifiedTime`: Drive の `modifiedTime` の生文字列をキャッシュ比較用に記録。
     *   **画像変換:** Markdown 内の Base64 PNG 画像 (`data:image/png;base64,...`) を検出し、AVIF 形式 (`data:image/avif;base64,...`) に変換します。この処理は Pillow ライブラリのネイティブ機能を使用しており、以前使用していた `pillow-avif-plugin` は不要になりました。画像幅が設定値 (`IMAGE_WIDTH`) を超える場合はリサイズします。
+    *   **ショートコード処理:** Google ドキュメント内で等幅フォントを利用して書かれ、マークダウンとしてダウンロードされた際に `` `{{< shortcode >}}` `` のように変換されたHugoショートコードを検出し、正しい `{{< shortcode >}}` 形式に自動的に修正します。
     *   **キャッシュ管理:** ローカルに保存されている Markdown ファイルの `modifiedTime` フロントマターと、Drive から取得した最新の `modifiedTime` を比較し、変更がない場合はダウンロード・処理をスキップします。ファイルの `draft` 状態もキャッシュ比較時に考慮されます。
     *   **ローカルファイル同期:** Drive 上に存在しないファイルに対応するローカル Markdown ファイル (`content/google-drive/{file_id}.md`) を削除します。この処理は `main()` 内のヘルパー関数 `_synchronize_local_files()` で実行され、削除されるファイルが以前公開状態 (`draft: false`) であったかどうかも記録されます。
     *   **変更検知マーカー:** 以下のいずれかの条件を満たす場合にのみ、リポジトリルートに `.content-updated` ファイルを作成します。この処理は `main()` 内のヘルパー関数 `_handle_marker_file()` で実行されます。

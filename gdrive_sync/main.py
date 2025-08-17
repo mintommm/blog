@@ -378,7 +378,7 @@ class MarkdownProcessor:
                         # Drive times are 'Z', local should also be ISO with offset or 'Z'
                         if local_dt.tzinfo is None or local_dt.tzinfo.utcoffset(local_dt) is None:
                             logger.warning(f"[{file_id}] check_cache: Local datetime '{local_modified_time_str}' is naive, assuming UTC for comparison.")
-                            local_dt = local_dt.replace(tzinfo=tzutc())
+                            local_dt = local_dt.replace(tzinfo=tzutc()) # Make it UTC-aware
                         if drive_dt.tzinfo is None or drive_dt.tzinfo.utcoffset(drive_dt) is None:
                             # This case should be less common for Drive times if they are proper ISO
                             logger.warning(f"[{file_id}] check_cache: Drive datetime '{drive_modified_time_str}' is naive, assuming UTC for comparison.")
@@ -500,6 +500,29 @@ class MarkdownProcessor:
         if image_count > 0:
             logger.info(f'Processed {image_count} embedded PNG images.')
         return content
+
+    def _process_shortcodes(self, content: str) -> str:
+        """
+        Finds and unescapes Hugo shortcodes that were escaped by Google Docs.
+        Example: {{\< youtube id="123" \>}} -> {{< youtube id="123" >}}
+        """
+        # This pattern looks for the escaped version of {{< ... >}}
+        # It assumes that '<' and '>' are backslash-escaped.
+        # The content of the shortcode is captured non-greedily.
+        escaped_shortcode_pattern = r'\`(\{\{\<.*?\>\}\})\`'
+
+        def unescape_func(match: re.Match) -> str:
+            # The captured group is the inner content of the shortcode.
+            inner_content = match.group(1)
+            # Reconstruct the correct shortcode syntax.
+            return inner_content
+
+        processed_content, count = re.subn(escaped_shortcode_pattern, unescape_func, content)
+
+        if count > 0:
+            logger.info(f'Unescaped {count} Hugo shortcodes.')
+
+        return processed_content
 
     def _parse_iso_datetime(self, iso_str: Optional[str]) -> Optional[datetime]:
         """
@@ -809,6 +832,16 @@ class MarkdownProcessor:
             logger.exception(f"[{file_id_for_logs}] Error replacing escaped blockquotes.")
             current_error = post.metadata.get('conversion_error', '')
             post.metadata['conversion_error'] = f"{current_error}; Blockquote unescaping error: {e}".strip('; ')
+
+
+        # Unescape Hugo shortcodes that may have been escaped by Google Docs
+        try:
+            logger.info(f"[{file_id_for_logs}] Unescaping Hugo shortcodes.")
+            post.content = self._process_shortcodes(post.content)
+        except Exception as sc_err:
+            logger.exception(f"[{file_id_for_logs}] Error during shortcode unescaping.")
+            current_error = post.metadata.get('conversion_error', '')
+            post.metadata['conversion_error'] = f"{current_error}; Shortcode unescaping error: {sc_err}".strip('; ')
 
 
         # Finalize: Format datetime objects to strings for YAML serialization and dump frontmatter
