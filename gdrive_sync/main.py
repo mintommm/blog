@@ -504,10 +504,9 @@ class MarkdownProcessor:
     def _process_shortcodes(self, content: str) -> str:
         """
         Finds and unescapes Hugo shortcodes that were escaped by Google Docs.
-        Example: {{\< youtube id="123" \>}} -> {{< youtube id="123" >}}
         """
         # This pattern looks for the escaped version of {{< ... >}}
-        # It assumes that '<' and '>' are backslash-escaped.
+        # It assumes that {{< ... >}} are backquote-escaped like `{{< ... >}}`.
         # The content of the shortcode is captured non-greedily.
         escaped_shortcode_pattern = r'\`(\{\{\<.*?\>\}\})\`'
 
