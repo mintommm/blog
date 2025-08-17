@@ -71,6 +71,10 @@ Link
 
 ![sample](/icon/apple-touch-icon.png)
 
+{{< youtube F50bCrlTbIs >}}
+
+{{< x user="adityatelange" id="1724414854348357922" >}}
+
 | id  | name | date       |
 | --- | ---- | ---------- |
 | 1   | test | 2019-01-01 |
