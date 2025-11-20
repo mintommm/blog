@@ -41,7 +41,7 @@ jobs:
 
     # Python環境のセットアップ (gdrive_sync/.python-version ファイルを参照)
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version-file: gdrive_sync/.python-version
 
